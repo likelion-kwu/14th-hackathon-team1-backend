@@ -72,7 +72,7 @@ RDS 생성에 5~10분 걸리므로 A-3을 시작해 놓고 A-4와 systemd 파일
 **환경변수 이름**
 
 ```
-DB_URL=jdbc:mysql://<rds-endpoint>:3306/hackathon?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+DB_URL=jdbc:mysql://<rds-endpoint>:3306/hackathon?connectionTimeZone=Asia/Seoul&characterEncoding=UTF-8
 DB_USERNAME=admin
 DB_PASSWORD=<...>
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
@@ -374,5 +374,5 @@ Secrets가 살아있는지 확인합니다. 유실됐으면 재등록합니다.
 | 로컬 curl은 되는데 외부만 실패 | `server.address: 127.0.0.1`이 들어갔거나 보안그룹 8080이 미개방입니다 |
 | 앱이 로그도 없이 죽음 | 메모리 부족입니다. `dmesg \| grep -i oom`으로 확인합니다. 스왑과 `-Xmx512m`을 함께 적용했는지 점검합니다 |
 | GET은 되는데 POST만 CORS 에러 | preflight(OPTIONS)를 허용하지 않았습니다 |
-| 시각이 9시간 어긋남 | 타임존 세 군데(EC2 OS / `spring.jackson` / `DB_URL`의 `serverTimezone`) 중 누락이 있습니다 |
+| 시각이 9시간 어긋남 | 타임존 세 군데(EC2 OS / `spring.jackson` / `DB_URL`의 `connectionTimeZone`) 중 누락이 있습니다 |
 | 앱 기동 실패 | Boot 4에서 제거된 `write-dates-as-timestamps`를 설정에 넣었습니다 |
