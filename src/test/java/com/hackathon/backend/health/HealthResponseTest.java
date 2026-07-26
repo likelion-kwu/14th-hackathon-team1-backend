@@ -8,9 +8,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * timeZone 필드가 실제로 주어진 타임존을 반영하는지 확인한다.
+ * timeZone 필드가 실제로 주어진 타임존을 반영하는지 확인합니다.
  * MockMvc 테스트에서 ZoneId.systemDefault() 로 비교하면 프로덕션 코드와 같은 식을
- * 되풀이하는 자기충족적 단정이 되므로, 고정값을 주입해 여기서 검증한다.
+ * 되풀이하는 자기충족적 단정이 되므로, 고정값을 주입해 여기서 검증합니다.
  */
 class HealthResponseTest {
 

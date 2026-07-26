@@ -23,46 +23,46 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-// named('test') 가 아니라 withType(Test) 를 쓴다.
-// 나중에 integrationTest 같은 Test 태스크를 추가해도 아래 격리를 상속한다.
+// named('test') 가 아니라 withType(Test) 를 씁니다.
+// 나중에 integrationTest 같은 Test 태스크를 추가해도 아래 격리를 상속합니다.
 tasks.withType(Test).configureEach {
 	useJUnitPlatform()
 
 	// 테스트의 작업 디렉토리가 프로젝트 루트라서, 기본 설정 탐색 경로에 포함된
-	// ./config/ 의 application-local.yml 이 테스트 컨텍스트로 딸려 들어온다.
-	// 각자 로컬 DB 자격증명이 다르므로 그대로 두면 테스트가 사람마다 다르게 깨진다.
-	// spring.config.location 은 기본 탐색 경로를 대체하므로 file: 경로가 전부 빠진다.
+	// ./config/ 의 application-local.yml 이 테스트 컨텍스트로 딸려 들어옵니다.
+	// 각자 로컬 DB 자격증명이 다르므로 그대로 두면 테스트가 사람마다 다르게 깨집니다.
+	// spring.config.location 은 기본 탐색 경로를 대체하므로 file: 경로가 전부 빠집니다.
 	//
 	// optional: 을 붙이는 이유는 매칭되는 설정 파일이 하나도 없을 때의 기동 실패를
-	// 막기 위해서다. 붙이지 않으면 src/main/resources/application.yml 의 존재가
+	// 막기 위해서입니다. 붙이지 않으면 src/main/resources/application.yml 의 존재가
 	// 빌드 전제조건이 되고, 누군가 그 파일을 옮기면 원인을 찾기 어려운 전체
-	// 테스트 실패로 나타난다.
+	// 테스트 실패로 나타납니다.
 	//
 	// 주의: IDE 자체 JUnit 러너로 돌리면 이 설정이 적용되지 않아
-	// Gradle 과 결과가 갈릴 수 있다. 테스트는 ./gradlew test 로 확인한다.
+	// Gradle 과 결과가 갈릴 수 있습니다. 테스트는 ./gradlew test 로 확인합니다.
 	systemProperty 'spring.config.location', 'optional:classpath:/,optional:classpath:/config/'
 }
 
-// toolchain 이 17 이라 JDK 18+ 의 "기본 UTF-8" 보장을 받지 못한다.
-// 한글 주석/문자열이 있으므로 CI 러너의 로케일과 무관하게 UTF-8 로 고정한다.
+// toolchain 이 17 이라 JDK 18+ 의 "기본 UTF-8" 보장을 받지 못합니다.
+// 한글 주석/문자열이 있으므로 CI 러너의 로케일과 무관하게 UTF-8 로 고정합니다.
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
 }
 
-// 배포 스크립트가 버전 문자열에 의존하지 않도록 산출물 이름을 고정한다
+// 배포 스크립트가 버전 문자열에 의존하지 않도록 산출물 이름을 고정합니다.
 tasks.named('bootJar') {
 	archiveFileName = 'app.jar'
 }
 
 // plain jar 를 끄지 않으면 build/libs 에 jar 가 2개 생겨
-// 배포 스크립트가 글롭(*.jar)을 쓰는 순간 어느 것이 실행 가능한지 모호해진다
+// 배포 스크립트가 글롭(*.jar)을 쓰는 순간 어느 것이 실행 가능한지 모호해집니다.
 tasks.named('jar') {
 	enabled = false
 }
 
-// application-local.yml 은 각자의 로컬 DB 자격증명을 담는다.
-// src/main/resources 에 두면 jar 안으로 패키징돼 배포 산출물에 실리므로 제외한다.
-// 로컬 실행 시에는 프로젝트 루트의 config/ 에 두면 Boot 가 자동으로 읽는다.
+// application-local.yml 은 각자의 로컬 DB 자격증명을 담습니다.
+// src/main/resources 에 두면 jar 안으로 패키징돼 배포 산출물에 실리므로 제외합니다.
+// 로컬 실행 시에는 프로젝트 루트의 config/ 에 두면 Boot 가 자동으로 읽습니다.
 tasks.named('processResources') {
 	exclude 'application-local.y*ml'
 }
