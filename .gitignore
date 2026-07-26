@@ -1,0 +1,8 @@
+﻿*.pem
+.env
+application-local.yml
+build/
+.gradle/
+.idea/
+*.iml
+HELP.md
