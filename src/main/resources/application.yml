@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: hackathon-backend
+  profiles:
+    active: local
+  jackson:
+    time-zone: Asia/Seoul
+    # Boot 3 가이드에 흔히 나오는 serialization.write-dates-as-timestamps 설정은 넣지 않는다.
+    # Boot 4가 쓰는 Jackson 3에서는 해당 상수가 SerializationFeature에서 제거됐고
+    # (넣으면 기동 실패), 날짜는 기본으로 ISO-8601 문자열로 직렬화된다.
