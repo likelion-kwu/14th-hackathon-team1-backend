@@ -235,10 +235,14 @@ EnvironmentFile=/etc/hackathon.env
 # 환경변수 누락을 기동 전에 잡습니다. 애플리케이션에서는 잡을 수 없습니다.
 # DB_URL 이 없으면 에러 메시지가 원인을 가리키지 않고("'url' must start with jdbc"),
 # DB_USERNAME 만 없으면 기동에 성공한 뒤 첫 쿼리에서 터집니다.
-ExecStartPre=/usr/bin/grep -q '^DB_URL=jdbc:' /etc/hackathon.env
-ExecStartPre=/usr/bin/grep -q '^DB_USERNAME=.\+' /etc/hackathon.env
-ExecStartPre=/usr/bin/grep -q '^DB_PASSWORD=.\+' /etc/hackathon.env
-ExecStartPre=/usr/bin/grep -q '^CORS_ALLOWED_ORIGINS=.\+' /etc/hackathon.env
+#
+# + 접두어는 해당 명령만 root 로 실행합니다. 없으면 ExecStartPre 도 User=ubuntu 로
+# 실행되어 /etc/hackathon.env(600, root) 를 읽지 못하고 Permission denied 로 실패합니다.
+# 정규식에 \+ 를 쓰면 systemd 가 이스케이프로 해석해 경고를 내므로 -E 와 .+ 를 씁니다.
+ExecStartPre=+/usr/bin/grep -q '^DB_URL=jdbc:' /etc/hackathon.env
+ExecStartPre=+/usr/bin/grep -qE '^DB_USERNAME=.+' /etc/hackathon.env
+ExecStartPre=+/usr/bin/grep -qE '^DB_PASSWORD=.+' /etc/hackathon.env
+ExecStartPre=+/usr/bin/grep -qE '^CORS_ALLOWED_ORIGINS=.+' /etc/hackathon.env
 ExecStart=/usr/bin/java -Xms256m -Xmx512m -jar /opt/hackathon/app.jar --spring.profiles.active=prod
 SuccessExitStatus=143
 Restart=always
@@ -328,7 +332,7 @@ CORS origin을 코드에 박아두면 프론트 배포 주소가 정해질 때�
 |---|---|
 | Secrets 등록: `EC2_HOST`(탄력적 IP), `EC2_USER`(ubuntu), `EC2_SSH_KEY`(.pem 전문) | |
 | `.github/workflows/deploy.yml` 작성 | |
-| 배포 계정에 재시작 권한 부여 (sudoers NOPASSWD, 해당 명령만) | |
+| 배포 계정의 무비밀번호 sudo 확인 (클라우드 이미지 기본값으로 이미 가능) | |
 
 워크플로 흐름입니다.
 
