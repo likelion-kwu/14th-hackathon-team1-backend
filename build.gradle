@@ -19,6 +19,16 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+
+	// @Valid / @NotBlank 를 쓰려면 별도로 필요합니다.
+	// 없으면 @Valid 가 조용히 무시되어 예외 핸들러의 400 분기가 영원히 타지 않습니다.
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+	// Boot 4 는 springdoc 을 의존성 관리하지 않으므로 버전을 명시합니다.
+	// 2.x 는 Spring Framework 6 대상이라 Boot 4 에서 동작하지 않습니다.
+	// 3.0.x 부터 Framework 7 / Boot 4 를 지원합니다.
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

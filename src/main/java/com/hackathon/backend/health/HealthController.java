@@ -5,6 +5,8 @@ import java.time.ZoneId;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 /**
  * 배포 스모크 테스트와 프론트 연결 확인용 엔드포인트.
  * GitHub Actions 가 배포 직후 이 경로를 호출해 배포 성공 여부를 판정합니다.
@@ -22,7 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
  * 어긋난 상태라는 신호입니다. 다만 응답 시각은 Jackson 설정이 보정하므로
  * 값이 UTC 라도 API 응답 자체는 정상입니다. 스모크 테스트를 이 값으로
  * 게이트하지 않습니다 — 정상 동작하는 서버를 떨어뜨리게 됩니다.
+ *
+ * DB 접속 확인은 아직 없습니다. DataSource 가 들어오는 B-4 에서 추가합니다.
+ * 그때도 응답 형태는 유지하고 필드만 늘립니다.
  */
+@Tag(name = "health", description = "배포 확인용 엔드포인트입니다. 공통 응답 래퍼를 쓰지 않습니다.")
 @RestController
 public class HealthController {
 

@@ -43,6 +43,17 @@ spring:
       # 운영 데이터가 전부 지워집니다.
       ddl-auto: update
 
+springdoc:
+  # 운영에서는 기본적으로 닫습니다. 인증이 없는 상태로 열려 있으면
+  # 전체 엔드포인트와 엔티티 필드가 그대로 공개되고, Swagger UI 의 "Try it out"
+  # 이 임의의 외부인에게 쓰기 요청 폼을 제공합니다.
+  # 심사나 프론트 연동 중 필요하면 /etc/hackathon.env 에
+  # SWAGGER_ENABLED=true 를 넣고 서비스를 재시작합니다.
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
 app:
   cors:
     # 공통 application.yml 의 로컬 기본값을 덮습니다.
