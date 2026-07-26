@@ -23,8 +23,24 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-tasks.named('test') {
+// named('test') 가 아니라 withType(Test) 를 쓴다.
+// 나중에 integrationTest 같은 Test 태스크를 추가해도 아래 격리를 상속한다.
+tasks.withType(Test).configureEach {
 	useJUnitPlatform()
+
+	// 테스트의 작업 디렉토리가 프로젝트 루트라서, 기본 설정 탐색 경로에 포함된
+	// ./config/ 의 application-local.yml 이 테스트 컨텍스트로 딸려 들어온다.
+	// 각자 로컬 DB 자격증명이 다르므로 그대로 두면 테스트가 사람마다 다르게 깨진다.
+	// spring.config.location 은 기본 탐색 경로를 대체하므로 file: 경로가 전부 빠진다.
+	//
+	// optional: 을 붙이는 이유는 매칭되는 설정 파일이 하나도 없을 때의 기동 실패를
+	// 막기 위해서다. 붙이지 않으면 src/main/resources/application.yml 의 존재가
+	// 빌드 전제조건이 되고, 누군가 그 파일을 옮기면 원인을 찾기 어려운 전체
+	// 테스트 실패로 나타난다.
+	//
+	// 주의: IDE 자체 JUnit 러너로 돌리면 이 설정이 적용되지 않아
+	// Gradle 과 결과가 갈릴 수 있다. 테스트는 ./gradlew test 로 확인한다.
+	systemProperty 'spring.config.location', 'optional:classpath:/,optional:classpath:/config/'
 }
 
 // toolchain 이 17 이라 JDK 18+ 의 "기본 UTF-8" 보장을 받지 못한다.
