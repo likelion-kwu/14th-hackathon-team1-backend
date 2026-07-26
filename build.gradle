@@ -1,0 +1,52 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.1.0'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.hackathon'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+// toolchain 이 17 이라 JDK 18+ 의 "기본 UTF-8" 보장을 받지 못한다.
+// 한글 주석/문자열이 있으므로 CI 러너의 로케일과 무관하게 UTF-8 로 고정한다.
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+}
+
+// 배포 스크립트가 버전 문자열에 의존하지 않도록 산출물 이름을 고정한다
+tasks.named('bootJar') {
+	archiveFileName = 'app.jar'
+}
+
+// plain jar 를 끄지 않으면 build/libs 에 jar 가 2개 생겨
+// 배포 스크립트가 글롭(*.jar)을 쓰는 순간 어느 것이 실행 가능한지 모호해진다
+tasks.named('jar') {
+	enabled = false
+}
+
+// application-local.yml 은 각자의 로컬 DB 자격증명을 담는다.
+// src/main/resources 에 두면 jar 안으로 패키징돼 배포 산출물에 실리므로 제외한다.
+// 로컬 실행 시에는 프로젝트 루트의 config/ 에 두면 Boot 가 자동으로 읽는다.
+tasks.named('processResources') {
+	exclude 'application-local.y*ml'
+}
