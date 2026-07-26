@@ -15,6 +15,11 @@ application-local.y*ml
 # 빌드 산출물
 build/
 out/
+# Eclipse / VS Code Java 컴파일 출력입니다.
+# bin/ 전체를 무시하면 배포 스크립트를 bin/ 에 두었을 때 조용히 커밋에서
+# 누락되므로, 출력 디렉토리만 지정합니다. 스크립트는 scripts/ 를 씁니다.
+/bin/main/
+/bin/test/
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
 
