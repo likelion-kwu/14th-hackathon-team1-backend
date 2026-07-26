@@ -109,6 +109,48 @@ class GlobalExceptionHandlerTest {
 	}
 
 	@Test
+	@DisplayName("중복 키 위반은 409 CONFLICT 를 반환합니다")
+	void duplicateKeyReturnsConflict() throws Exception {
+		mockMvc.perform(post("/test/duplicate"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.error.code").value("CONFLICT"));
+	}
+
+	@Test
+	@DisplayName("중복 키가 아닌 제약 위반은 500 을 반환합니다")
+	void nonDuplicateIntegrityViolationReturns500() throws Exception {
+		// NOT NULL 이나 FK 위반은 검증 누락이나 스키마 문제, 즉 서버 버그입니다.
+		// 409 로 내려보내면 warn 로그에 묻혀 알림에 걸리지 않습니다.
+		mockMvc.perform(post("/test/integrity"))
+				.andExpect(status().isInternalServerError())
+				.andExpect(jsonPath("$.error.code").value("INTERNAL_ERROR"));
+	}
+
+	@Test
+	@DisplayName("동시 수정 충돌은 재시도 가능한 코드로 구분합니다")
+	void optimisticLockingUsesDistinctCode() throws Exception {
+		// 중복 키와 달리 같은 요청을 다시 보내면 성공할 수 있으므로
+		// 프론트가 재시도 여부를 판단할 수 있어야 합니다.
+		mockMvc.perform(post("/test/optimistic"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.error.code").value("CONCURRENT_MODIFICATION"));
+	}
+
+	@Test
+	@DisplayName("충돌 응답에 제약 조건 이름이 노출되지 않습니다")
+	void conflictHidesConstraintName() throws Exception {
+		String body = mockMvc.perform(post("/test/duplicate"))
+				.andReturn()
+				.getResponse()
+				.getContentAsString();
+
+		// 예외 메시지를 그대로 담으면 테이블·제약 이름으로 스키마가 드러납니다.
+		org.assertj.core.api.Assertions.assertThat(body)
+				.doesNotContain("uk_items_name")
+				.doesNotContain("Duplicate entry");
+	}
+
+	@Test
 	@DisplayName("매핑이 없는 경로는 404 를 반환합니다")
 	void unmappedPathReturns404() throws Exception {
 		// 프레임워크가 던지는 4xx 예외를 Exception 핸들러가 삼켜 500 으로 바꾸는

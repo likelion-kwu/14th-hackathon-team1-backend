@@ -5,6 +5,11 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.sql.SQLIntegrityConstraintViolationException;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -152,6 +157,66 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
 				.body(ApiResponse.failure(ApiError.ofFields(ErrorCode.VALIDATION_FAILED, fieldErrors)));
+	}
+
+	/**
+	 * 유니크 제약 위반입니다.
+	 *
+	 * Spring MVC 표준 예외 목록에 없어서 처리하지 않으면 500 이 됩니다.
+	 * 중복 요청은 클라이언트가 원인을 알 수 있어야 하므로 409 로 변환합니다.
+	 *
+	 * 예외 메시지는 응답에 담지 않습니다. 제약 조건 이름과 테이블·컬럼명이
+	 * 그대로 드러납니다.
+	 */
+	@ExceptionHandler(DataIntegrityViolationException.class)
+	public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+		if (!isDuplicateKey(e)) {
+			// NOT NULL 위반이나 FK 위반, Data too long, Incorrect string value 는
+			// 클라이언트 잘못이 아니라 검증 누락이나 스키마/charset 문제입니다.
+			// 409 로 내려보내면 서버 버그가 warn 로그에 묻힙니다.
+			log.error("데이터 제약 위반입니다. 검증 누락이나 스키마 문제일 수 있습니다.", e);
+
+			ApiError error = ApiError.of(ErrorCode.INTERNAL_ERROR);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.failure(error));
+		}
+
+		log.warn("중복 키로 요청을 거부했습니다: {}", e.getMessage());
+
+		ApiError error = ApiError.of(ErrorCode.CONFLICT);
+		return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.failure(error));
+	}
+
+	/**
+	 * 동시 수정 충돌입니다.
+	 *
+	 * 삭제 대상 행이 조회 후 사라진 경우처럼, 다른 트랜잭션과 경합했을 때 발생합니다.
+	 * 유니크 위반과 달리 같은 요청을 재시도하면 성공할 수 있으므로 코드를 구분합니다.
+	 */
+	@ExceptionHandler(OptimisticLockingFailureException.class)
+	public ResponseEntity<ApiResponse<Void>> handleOptimisticLocking(OptimisticLockingFailureException e) {
+		log.warn("동시 수정 충돌로 요청을 거부했습니다: {}", e.getMessage());
+
+		ApiError error = ApiError.of(ErrorCode.CONCURRENT_MODIFICATION);
+		return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.failure(error));
+	}
+
+	/**
+	 * 근본 원인이 중복 키인지 판별합니다.
+	 *
+	 * DataIntegrityViolationException 은 유니크 위반뿐 아니라 NOT NULL, FK,
+	 * 길이 초과, 인코딩 문제까지 모두 감싸므로 예외 타입만으로는 구분할 수 없습니다.
+	 * Spring 이 중복 키를 별도 하위 타입으로 변환하는 경우와, Hibernate 의
+	 * ConstraintViolationException 을 원인으로 감싸는 경우를 함께 확인합니다.
+	 */
+	private boolean isDuplicateKey(DataIntegrityViolationException e) {
+		if (e instanceof DuplicateKeyException) {
+			return true;
+		}
+		Throwable cause = e.getCause();
+		if (cause instanceof org.hibernate.exception.ConstraintViolationException hibernateCause) {
+			return hibernateCause.getSQLException() instanceof SQLIntegrityConstraintViolationException;
+		}
+		return false;
 	}
 
 	@ExceptionHandler(NotFoundException.class)

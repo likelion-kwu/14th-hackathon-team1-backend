@@ -44,17 +44,18 @@ class HealthControllerTest {
 	}
 
 	@Test
-	@DisplayName("응답은 래핑되지 않은 세 개의 필드로 고정된다")
+	@DisplayName("응답은 래핑되지 않은 네 개의 필드로 고정된다")
 	void responseIsNotWrapped() throws Exception {
 		// 공통 응답 래퍼(ApiResponse)를 도입할 때 /health 까지 래핑되면
 		// 배포 스모크 테스트가 조용히 깨집니다. 그 회귀를 여기서 잡습니다.
 		mockMvc.perform(get("/health"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.*", hasSize(3)))
+				.andExpect(jsonPath("$.*", hasSize(4)))
 				.andExpect(jsonPath("$.data").doesNotExist())
 				.andExpect(jsonPath("$.status").exists())
 				.andExpect(jsonPath("$.serverTime").exists())
-				.andExpect(jsonPath("$.timeZone").exists());
+				.andExpect(jsonPath("$.timeZone").exists())
+				.andExpect(jsonPath("$.database").exists());
 	}
 
 	@Test
@@ -71,6 +72,17 @@ class HealthControllerTest {
 		assertThatCode(() -> OffsetDateTime.parse(serverTime)).doesNotThrowAnyException();
 		// Jackson 이 [Asia/Seoul] 같은 존 ID 접미사를 붙이면 브라우저 Date 파싱이 깨집니다.
 		assertThat(serverTime).doesNotContain("[");
+	}
+
+	@Test
+	@DisplayName("DataSource 가 없는 슬라이스에서는 database 가 NOT_CONFIGURED 다")
+	void databaseNotConfiguredInSlice() throws Exception {
+		// DataSource 를 ObjectProvider 로 받기 때문에 슬라이스에서도 기동합니다.
+		// 여기서 500 이 나면 컨트롤러가 DataSource 를 필수로 요구하는 것입니다.
+		mockMvc.perform(get("/health"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.database").value("NOT_CONFIGURED"))
+				.andExpect(jsonPath("$.status").value("UP"));
 	}
 
 	@Test

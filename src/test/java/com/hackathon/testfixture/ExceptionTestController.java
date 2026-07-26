@@ -4,6 +4,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -59,6 +62,27 @@ public class ExceptionTestController {
 	@PostMapping("/test/not-found")
 	public ApiResponse<Void> notFound() {
 		throw new NotFoundException("항목을 찾을 수 없습니다");
+	}
+
+	/** 중복 키 위반입니다. 409 로 변환되어야 합니다. */
+	@PostMapping("/test/duplicate")
+	public ApiResponse<Void> duplicate() {
+		throw new DuplicateKeyException("Duplicate entry 'x' for key 'items.uk_items_name'");
+	}
+
+	/**
+	 * 중복 키가 아닌 제약 위반입니다(NOT NULL 등).
+	 * 클라이언트 잘못이 아니므로 409 가 아니라 500 이어야 합니다.
+	 */
+	@PostMapping("/test/integrity")
+	public ApiResponse<Void> integrity() {
+		throw new DataIntegrityViolationException("Column 'name' cannot be null");
+	}
+
+	/** 동시 수정 충돌입니다. 재시도하면 성공할 수 있으므로 코드가 구분되어야 합니다. */
+	@PostMapping("/test/optimistic")
+	public ApiResponse<Void> optimistic() {
+		throw new OptimisticLockingFailureException("행이 이미 변경되었습니다");
 	}
 
 	@PostMapping("/test/boom")

@@ -29,7 +29,22 @@ dependencies {
 	// 3.0.x 부터 Framework 7 / Boot 4 를 지원합니다.
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+	// 운영 DB 드라이버입니다. 컴파일 시점에는 필요 없습니다.
+	runtimeOnly 'com.mysql:mysql-connector-j'
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+
+	// Boot 4 는 테스트 슬라이스를 모듈별로 쪼갰습니다. @DataJpaTest 는 별도
+	// 스타터에 들어 있어서, 이것 없이는 애노테이션 자체를 찾을 수 없습니다.
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+
+	// 테스트는 설정 탐색이 클래스패스로 제한되어 datasource 설정이 없습니다.
+	// H2 가 클래스패스에 있으면 Boot 가 인메모리 DB 를 자동 구성하므로
+	// 별도 테스트 설정 파일 없이 @SpringBootTest 가 뜹니다.
+	// 다만 DDL 은 H2 방언으로만 검증되고 MySQL 방언은 검증되지 않습니다.
+	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

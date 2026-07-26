@@ -55,6 +55,18 @@ class CorsConfigTest {
 	}
 
 	@Test
+	@DisplayName("/api 경로의 POST preflight 도 통과시킵니다")
+	void allowsApiPostPreflight() throws Exception {
+		// 문서 8장이 요구하는 검증 대상은 /api 의 POST 입니다.
+		// 매핑이 /** 이므로 함께 덮이지만, 실제 사용 경로로 한 번 더 확인합니다.
+		mockMvc.perform(options("/api/items")
+						.header("Origin", ALLOWED_ORIGIN)
+						.header("Access-Control-Request-Method", "POST"))
+				.andExpect(status().isOk())
+				.andExpect(header().string("Access-Control-Allow-Origin", ALLOWED_ORIGIN));
+	}
+
+	@Test
 	@DisplayName("허용되지 않은 origin 은 거부합니다")
 	void rejectsUnknownOrigin() throws Exception {
 		// 설정이 무의미하게 모든 origin 을 허용하고 있지 않은지 확인합니다.

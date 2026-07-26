@@ -27,6 +27,11 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+    hikari:
+      # 기본값은 30초입니다. /health 가 DB 접속을 확인하므로, RDS 가 응답하지
+      # 않으면 그 요청이 30초 매달립니다. 스모크 테스트와 모니터링이 그만큼
+      # 멈추므로 짧게 잡습니다.
+      connection-timeout: 2000
 
   jpa:
     hibernate:

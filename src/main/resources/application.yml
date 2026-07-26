@@ -36,6 +36,21 @@ spring:
     # 직렬화됩니다.
 
   jpa:
+    properties:
+      hibernate:
+        timezone:
+          # 시간 컬럼을 UTC 로 정규화해 저장합니다. "DB 에는 UTC, 표시는 KST" 규칙입니다.
+          #
+          # 명시하는 이유가 있습니다. 기본값(DEFAULT)은 dialect 가 타임존 컬럼을
+          # 지원하는지에 따라 동작이 갈립니다. H2 는 NATIVE 라 오프셋을 컬럼에
+          # 보존하지만 MySQL 은 지원하지 않아 UTC 로 정규화합니다. 그대로 두면
+          # 테스트(H2)와 운영(MySQL)의 저장 형태가 달라지고, 테스트에서 통과한
+          # 오프셋 관련 단정이 운영에서 깨집니다.
+          #
+          # 이 값을 고정하면 두 환경이 같은 형태로 저장하고, DB 를 직접 조회했을 때
+          # 보이는 값이 UTC 라는 것도 규칙으로 설명됩니다.
+          default_storage: NORMALIZE_UTC
+
     # 기본값이 true 입니다. 켜져 있으면 뷰 렌더링 구간까지 커넥션을 잡고 있어
     # 커넥션이 10개(Hikari 기본)뿐인 db.t3.micro 에서 체감됩니다.
     # 공통에 두는 이유는 로컬에서 LazyInitializationException 을 미리 만나는 것이
