@@ -1,0 +1,43 @@
+# 자격증명 — 절대 커밋 금지
+*.pem
+*.key
+*.jks
+*.p12
+*.pfx
+id_rsa*
+*.env
+.env
+.env.*
+!.env.example
+application-local.y*ml
+!application-local.y*ml.example
+
+# 빌드 산출물
+build/
+out/
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Gradle
+.gradle/
+
+# 로컬 설정 (config/ 는 Boot 기본 탐색 경로. jar 에 패키징되지 않는다)
+config/application-local.yml
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 로그 / 덤프
+*.log
+logs/
+nohup.out
+*.hprof

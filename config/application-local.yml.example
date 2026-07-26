@@ -1,0 +1,40 @@
+# 이 파일을 같은 디렉토리의 application-local.yml 로 복사해서 각자 로컬 값으로 채웁니다.
+#
+#   cp config/application-local.yml.example config/application-local.yml
+#
+# config/ 에 두는 이유:
+#   Spring Boot 는 프로젝트 루트의 config/ 를 설정 탐색 경로에 포함하므로
+#   여기 두면 로컬 실행 시 자동으로 읽힙니다. 반면 src/main/resources 에 두면
+#   jar 안으로 패키징돼서 로컬 DB 자격증명이 배포 산출물에 실립니다.
+#
+# config/application-local.yml 은 .gitignore 에 있으므로 커밋되지 않습니다.
+#
+# JPA 가 들어온 뒤로는 이 파일이 없으면 ./gradlew bootRun 이 실패합니다.
+# ("Failed to configure a DataSource: 'url' attribute is not specified")
+# 로컬 MySQL 을 쓰거나, DB 를 띄우지 않고 앱만 확인하려면 아래 H2 블록을 쓰십시오.
+
+spring:
+  datasource:
+    # connectionTimeZone 은 Connector/J 8.0.23 부터의 정식 이름입니다.
+    # 예전 가이드에 나오는 serverTimezone 은 현재 별칭으로만 유효합니다.
+    url: jdbc:mysql://localhost:3306/hackathon?connectionTimeZone=Asia/Seoul&characterEncoding=UTF-8
+    username: hackathon
+    password: 1234
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+# 로컬 MySQL 없이 앱만 띄워볼 때 쓰는 대안입니다.
+# H2 는 testRuntimeOnly 로만 들어와 있으므로 build.gradle 에
+# runtimeOnly 'com.h2database:h2' 를 임시로 추가해야 합니다.
+#
+#spring:
+#  datasource:
+#    url: jdbc:h2:mem:hackathon;DB_CLOSE_DELAY=-1
+#    driver-class-name: org.h2.Driver
+#    username: sa
+#    password:
+#  jpa:
+#    hibernate:
+#      ddl-auto: update

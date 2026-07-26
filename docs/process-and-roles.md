@@ -72,7 +72,7 @@ RDS 생성에 5~10분 걸리므로 A-3을 시작해 놓고 A-4와 systemd 파일
 **환경변수 이름**
 
 ```
-DB_URL=jdbc:mysql://<rds-endpoint>:3306/hackathon?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+DB_URL=jdbc:mysql://<rds-endpoint>:3306/hackathon?connectionTimeZone=Asia/Seoul&characterEncoding=UTF-8
 DB_USERNAME=admin
 DB_PASSWORD=<...>
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
@@ -164,7 +164,12 @@ EC2/JVM 타임존이 제대로 잡혔는지 즉시 알 수 있습니다.
 
 ### 3-3. EC2 (RDS 생성 대기 중에 진행)
 
-- Ubuntu 22.04 LTS / t2.micro
+- Ubuntu 24.04 LTS / t3.micro (실제 구축된 구성입니다)
+- t3 계열은 **크레딧 사양을 `standard`로 변경**합니다. 기본값 `unlimited`는 CPU
+  크레딧이 소진되면 초과분이 별도 과금됩니다. 인스턴스 → 작업 → 인스턴스 설정 →
+  크레딧 사양 변경에서 바꿉니다
+- 프리티어 대상 인스턴스 타입은 계정 상태에 따라 다릅니다. Billing → 프리 티어
+  페이지에서 t2.micro 750시간으로 나오면 t2 를, 크레딧 방식이면 t3 도 무관합니다
 - 스토리지 **30GB gp3** — 기본 8GB로 두지 않습니다. 프리티어가 30GB까지 무료고,
   나중에 늘리려면 볼륨 수정 + 파일시스템 확장까지 해야 합니다
 - 키페어 생성 → `.pem`을 `~/.ssh/`에 두고 `chmod 400` 합니다.
@@ -176,8 +181,11 @@ EC2/JVM 타임존이 제대로 잡혔는지 즉시 알 수 있습니다.
 ### 3-4. EC2 초기 설정
 
 - JDK: `sudo apt update && sudo apt install -y openjdk-17-jdk`
+  - **Ubuntu 24.04 의 기본 JDK 는 21 입니다.** 설치 후 `java -version` 이 17 인지
+    확인하고, 21 이 잡혀 있으면 `sudo update-alternatives --config java` 로 바꿉니다.
+    로컬과 서버의 JDK 가 다르면 jar 가 서버에서 뜨지 않습니다
 - 타임존: `sudo timedatectl set-timezone Asia/Seoul` (기본 UTC라 안 하면 9시간 어긋납니다)
-- 스왑 4GB (t2.micro는 메모리 1GB라 없으면 앱이 실행 중 갑자기 죽습니다)
+- 스왑 4GB (t3.micro 도 메모리는 1GB 라 없으면 앱이 실행 중 갑자기 죽습니다)
 - `mysql-client` 설치 후 RDS 연결 확인: `mysql -h <endpoint> -u admin -p`
 
 | 작업 | 담당 |
@@ -224,6 +232,13 @@ After=network.target
 Type=simple
 User=ubuntu
 EnvironmentFile=/etc/hackathon.env
+# 환경변수 누락을 기동 전에 잡습니다. 애플리케이션에서는 잡을 수 없습니다.
+# DB_URL 이 없으면 에러 메시지가 원인을 가리키지 않고("'url' must start with jdbc"),
+# DB_USERNAME 만 없으면 기동에 성공한 뒤 첫 쿼리에서 터집니다.
+ExecStartPre=/usr/bin/grep -q '^DB_URL=jdbc:' /etc/hackathon.env
+ExecStartPre=/usr/bin/grep -q '^DB_USERNAME=.\+' /etc/hackathon.env
+ExecStartPre=/usr/bin/grep -q '^DB_PASSWORD=.\+' /etc/hackathon.env
+ExecStartPre=/usr/bin/grep -q '^CORS_ALLOWED_ORIGINS=.\+' /etc/hackathon.env
 ExecStart=/usr/bin/java -Xms256m -Xmx512m -jar /opt/hackathon/app.jar --spring.profiles.active=prod
 SuccessExitStatus=143
 Restart=always
@@ -236,7 +251,11 @@ SyslogIdentifier=hackathon
 WantedBy=multi-user.target
 ```
 
-`-Xmx512m`은 t2.micro에서 필수입니다. 지정하지 않으면 JVM이 힙을 크게 잡고 OOM으로 죽습니다.
+`-Xmx512m`은 메모리 1GB 인스턴스에서 필수입니다. 지정하지 않으면 JVM이 힙을 크게 잡고 OOM으로 죽습니다.
+
+`/etc/hackathon.env`에 `TZ=Asia/Seoul`도 함께 넣습니다. `spring.jackson.time-zone`은
+API 응답 직렬화만 담당하므로, JVM 기본 타임존이 UTC면 로그 시각이 어긋나고
+`/health`의 `timeZone` 값이 `UTC`로 나옵니다.
 
 **검증**: `systemctl status hackathon`이 active이고, EC2를 재부팅해도 자동으로 뜹니다
 (`enable`을 실제로 했는지 검증하는 단계입니다).
@@ -313,10 +332,10 @@ CORS origin을 코드에 박아두면 프론트 배포 주소가 정해질 때�
 
 워크플로 흐름입니다.
 
-1. `./gradlew bootJar`
+1. `./gradlew build` — **`bootJar`가 아닙니다.** `bootJar`는 `test`에 의존하지 않아서, `bootJar`만 쓰면 테스트가 CI에서 한 번도 돌지 않습니다
 2. `scp build/libs/app.jar` → `/opt/hackathon/app.jar`
 3. `ssh sudo systemctl restart hackathon`
-4. `curl http://<host>:8080/health` 스모크 테스트 (실패 시 워크플로 실패 처리)
+4. `curl -fsS http://<host>:8080/health` 스모크 테스트 (실패 시 워크플로 실패 처리). 본문을 파싱하지 않고 **상태 코드만** 판정합니다. `/health`는 DB 접속까지 확인해 DB가 끊기면 503을 반환하므로, 이 한 줄이 "배포는 성공했는데 앱은 죽어있는" 상태를 잡습니다
 
 **4번을 빼면 "배포는 성공했는데 앱은 죽어있는" 상태를 못 잡습니다. 반드시 넣습니다.**
 
@@ -374,5 +393,5 @@ Secrets가 살아있는지 확인합니다. 유실됐으면 재등록합니다.
 | 로컬 curl은 되는데 외부만 실패 | `server.address: 127.0.0.1`이 들어갔거나 보안그룹 8080이 미개방입니다 |
 | 앱이 로그도 없이 죽음 | 메모리 부족입니다. `dmesg \| grep -i oom`으로 확인합니다. 스왑과 `-Xmx512m`을 함께 적용했는지 점검합니다 |
 | GET은 되는데 POST만 CORS 에러 | preflight(OPTIONS)를 허용하지 않았습니다 |
-| 시각이 9시간 어긋남 | 타임존 세 군데(EC2 OS / `spring.jackson` / `DB_URL`의 `serverTimezone`) 중 누락이 있습니다 |
+| 시각이 9시간 어긋남 | 타임존 세 군데(EC2 OS / `spring.jackson` / `DB_URL`의 `connectionTimeZone`) 중 누락이 있습니다 |
 | 앱 기동 실패 | Boot 4에서 제거된 `write-dates-as-timestamps`를 설정에 넣었습니다 |
