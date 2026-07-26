@@ -2,7 +2,17 @@ spring:
   application:
     name: hackathon-backend
   profiles:
-    active: local
+    # active 가 아니라 default 를 쓴다. 차이는 기동 로그 문구 하나다.
+    #   active:  The following 1 profile is active: "local"
+    #   default: No active profile set, falling back to 1 default profile: "local"
+    # 배포 워크플로에서 --spring.profiles.active=prod 가 누락된 경우 후자가
+    # 로그에서 눈에 띈다. 다만 프로파일 누락 자체를 막아주지는 않는다.
+    # 두 설정 모두 플래그가 없으면 local 로 기동하고, 플래그가 있으면
+    # 커맨드라인이 이 파일을 이기므로 prod 전환은 어느 쪽이든 정상 동작한다.
+    #
+    # 주의: 이제 spring.profiles.active 가 비어 있으므로 로그 패턴이나
+    # 설정값에서 ${spring.profiles.active} 플레이스홀더를 쓰면 해석에 실패한다.
+    default: local
   jackson:
     time-zone: Asia/Seoul
     # Boot 3 가이드에 흔히 나오는 serialization.write-dates-as-timestamps 설정은 넣지 않는다.
