@@ -51,7 +51,25 @@ public class HealthRecord {
     // MEAL    → {"menu": "삼각김밥, 커피", "timing": "아침"}
     // EXERCISE → {"activity": "걷기", "duration": 30, "unit": "min"}
     // SKIN    → {"condition": "건조함", "area": "볼"}
-    @Column(columnDefinition = "JSON")
+    //
+    // 컬럼 타입을 JSON 이 아니라 TEXT 로 둡니다. 이유는 두 가지입니다.
+    //
+    // 첫째, 테스트(H2)에서 저장 원문과 조회 값이 달라집니다. H2 는 문자열을 JSON 컬럼에
+    // 넣을 때 "JSON 문서 원문"이 아니라 "JSON 으로 인코딩할 스칼라 값"으로 취급해
+    // {"bedtime":"03:00"} 이 "{\"bedtime\":\"03:00\"}" 으로 한 겹 더 감싸집니다
+    // (HealthRecordRepositoryTest 로 재현). 그대로 응답에 실리면 프론트가 JSON.parse 를
+    // 두 번 해야 합니다.
+    //   주의: 이건 H2 동작입니다. MySQL 8 은 넣은 문자열을 JSON 텍스트로 파싱해 저장하고
+    //   정규화된 텍스트로 돌려주므로 이 현상이 없습니다. "JSON 컬럼은 어디서나 깨진다" 로
+    //   읽지 마십시오.
+    //
+    // 둘째, 그럼에도 TEXT 로 가는 이유는 이 값을 저장하고 그대로 꺼내 쓰기만 할 뿐
+    // JSON_EXTRACT 같은 DB 내부 질의를 하지 않기 때문입니다. JSON 타입으로 얻는 것이
+    // 없는데 테스트와 운영의 저장 형태만 갈립니다. TEXT 면 양쪽이 같습니다.
+    //
+    // 저장 시점에 잘못된 JSON 을 DB 가 걸러주길 원하게 되면 그때는 TEXT 가 아니라
+    // @JdbcTypeCode(SqlTypes.JSON) 이 정공법입니다.
+    @Column(columnDefinition = "TEXT")
     private String detail;
 
     @Column(nullable = false)
