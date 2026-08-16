@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -238,9 +239,11 @@ class SummaryControllerTest {
 					1L, "종합 리포트 본문", null, 0, null,
 					LocalDateTime.of(2026, 8, 16, 21, 0), LocalDateTime.of(2026, 8, 16, 21, 0)));
 
+			// doesNotExist() 로 두면 키가 아예 빠진 경우까지 통과합니다. 우리가 지키려는
+			// 것은 "키는 있고 값이 null" 이므로 value(nullValue()) 로 단정합니다.
 			mockMvc.perform(get("/api/summaries/overall").param("memberId", "1"))
 					.andExpect(status().isOk())
-					.andExpect(jsonPath("$.data.detail").doesNotExist());
+					.andExpect(jsonPath("$.data.detail").value(nullValue()));
 		}
 
 		@Test

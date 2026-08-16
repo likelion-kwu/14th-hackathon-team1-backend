@@ -2,6 +2,7 @@ package com.hackathon.backend.healthrecord.controller;
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -101,9 +102,11 @@ class HealthRecordControllerTest {
 	void doesNotBreakWhenDetailIsNull() throws Exception {
 		given(healthRecordService.findToday(1L)).willReturn(List.of(recordWithDetail(null)));
 
+		// doesNotExist() 로 두면 키가 아예 빠진 경우까지 통과합니다. 우리가 지키려는
+		// 것은 "키는 있고 값이 null" 이므로 value(nullValue()) 로 단정합니다.
 		mockMvc.perform(get("/api/health-records/today").param("memberId", "1"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.data[0].detail").doesNotExist());
+				.andExpect(jsonPath("$.data[0].detail").value(nullValue()));
 	}
 
 	@Test
