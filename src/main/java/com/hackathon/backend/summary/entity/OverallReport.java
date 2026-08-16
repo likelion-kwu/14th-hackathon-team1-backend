@@ -36,7 +36,12 @@ public class OverallReport {
     private String summary;
 
     // 프론트엔드용 구조화 보고서 데이터
-    @Column(columnDefinition = "JSON")
+    //
+    // HealthRecord.detail 과 같은 이유로 JSON 이 아니라 TEXT 입니다. 판단 근거는
+    // 그쪽 주석에 정리해 두었습니다. 요약하면 (1) H2 에서 저장 원문과 조회 값이
+    // 달라지고(SummaryRepositoryTest 로 재현), (2) 이 값은 저장·조회만 할 뿐
+    // DB 내부 질의를 하지 않아 JSON 타입으로 얻는 것이 없기 때문입니다.
+    @Column(columnDefinition = "TEXT")
     private String detail;
 
     @Column(nullable = false)
