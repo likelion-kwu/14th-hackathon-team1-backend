@@ -44,6 +44,12 @@ dependencies {
 	// H2 가 클래스패스에 있으면 Boot 가 인메모리 DB 를 자동 구성하므로
 	// 별도 테스트 설정 파일 없이 @SpringBootTest 가 뜹니다.
 	// 다만 DDL 은 H2 방언으로만 검증되고 MySQL 방언은 검증되지 않습니다.
+
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+	testCompileOnly 'org.projectlombok:lombok'
+	testAnnotationProcessor 'org.projectlombok:lombok'
+
 	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
