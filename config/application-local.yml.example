@@ -10,31 +10,89 @@
 # config/application-local.yml 은 .gitignore 에 있으므로 커밋되지 않습니다.
 #
 # JPA 가 들어온 뒤로는 이 파일이 없으면 ./gradlew bootRun 이 실패합니다.
-# ("Failed to configure a DataSource: 'url' attribute is not specified")
-# 로컬 MySQL 을 쓰거나, DB 를 띄우지 않고 앱만 확인하려면 아래 H2 블록을 쓰십시오.
+#   Failed to configure a DataSource: 'url' attribute is not specified
+#
+# 아래 두 방식 중 하나를 고릅니다. 기본값은 A(H2) 입니다.
+#
+#   A. H2 인메모리  — 설치할 것이 없습니다. 앱 기동 / API 모양 / Swagger 확인용입니다.
+#   B. 로컬 MySQL   — 운영(RDS MySQL 8)과 같은 방언입니다. 스키마와 쿼리를 확인할 때 씁니다.
+#
+# 어느 쪽을 쓰든 ddl-auto 는 로컬에서만 update 입니다. 운영 전환 규칙은 README 를 보십시오.
+
+# ---------------------------------------------------------------------------
+# A. H2 인메모리 (기본값 · 별도 설치 없음)
+# ---------------------------------------------------------------------------
+#
+# build.gradle 에 developmentOnly 로 H2 가 들어가 있어 그대로 동작합니다.
+# 예전 안내처럼 build.gradle 을 고칠 필요가 없습니다. 고쳐서 커밋하지 마십시오.
+#
+# 반드시 ./gradlew bootRun 으로 실행합니다. developmentOnly 는 bootJar 에서
+# 제외되므로 java -jar 로는 H2 드라이버를 찾지 못합니다.
+#
+# MODE=MySQL 을 붙이는 이유는 H2 를 MySQL 호환 모드로 돌려 방언 차이를 줄이기
+# 위해서입니다. 다만 완전히 같지는 않습니다 — JSON 컬럼 동작이 특히 다르고,
+# 그것 때문에 detail 컬럼들이 TEXT 로 정해졌습니다(HealthRecord.detail 주석 참고).
+# 스키마나 쿼리를 진짜로 검증해야 하면 B 로 갑니다.
+#
+# 재시작하면 데이터가 전부 사라집니다. 이것이 이 방식의 장점이자 한계입니다.
 
 spring:
   datasource:
-    # connectionTimeZone 은 Connector/J 8.0.23 부터의 정식 이름입니다.
-    # 예전 가이드에 나오는 serverTimezone 은 현재 별칭으로만 유효합니다.
-    url: jdbc:mysql://localhost:3306/hackathon?connectionTimeZone=Asia/Seoul&characterEncoding=UTF-8
-    username: hackathon
-    password: 1234
+    url: jdbc:h2:mem:hackathon;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
   jpa:
     hibernate:
       ddl-auto: update
+    # 실행되는 SQL 을 콘솔에 찍습니다. H2 방식에서는 데이터를 확인할 수 있는
+    # 사실상 유일한 수단이라 켜 둡니다(아래 참고).
     show-sql: true
 
-# 로컬 MySQL 없이 앱만 띄워볼 때 쓰는 대안입니다.
-# H2 는 testRuntimeOnly 로만 들어와 있으므로 build.gradle 에
-# runtimeOnly 'com.h2database:h2' 를 임시로 추가해야 합니다.
+# spring.h2.console.enabled 는 넣지 않습니다. Boot 4 에서 H2 콘솔 자동설정이
+# 제거되어 이 설정은 아무 동작도 하지 않고 /h2-console 은 404 입니다.
+# (Boot 4 의 어떤 jar 에도 H2ConsoleAutoConfiguration 이 없습니다. 확인했습니다.)
+# 인터넷 가이드는 대부분 Boot 3 기준이라 이 설정을 넣으라고 하지만 무시하십시오.
+#
+# 테이블과 데이터를 눈으로 봐야 하면 아래 B(로컬 MySQL) 로 가는 것이 맞습니다.
+# H2 로도 봐야 한다면 show-sql 로그를 읽거나 조회 API 를 직접 호출합니다.
+
+# ---------------------------------------------------------------------------
+# B. 로컬 MySQL (운영과 같은 방언)
+# ---------------------------------------------------------------------------
+#
+# 위 A 블록 전체를 주석 처리하고 아래를 사용합니다.
+#
+# Docker 로 띄우는 것이 가장 빠릅니다. 아래 값과 맞춰 두었습니다.
+#
+#   docker run -d --name hey-mysql -p 3306:3306 \
+#     -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=hackathon \
+#     -e MYSQL_USER=hackathon -e MYSQL_PASSWORD=1234 mysql:8
+#
+# connectionTimeZone 은 Connector/J 8.0.23 부터의 정식 이름입니다.
+# 예전 가이드에 나오는 serverTimezone 은 현재 별칭으로만 유효합니다.
+#
+# characterEncoding 을 빼면 서버 charset 과 협상하게 되어 한글이 ??? 로 깨질 수 있습니다.
 #
 #spring:
 #  datasource:
-#    url: jdbc:h2:mem:hackathon;DB_CLOSE_DELAY=-1
-#    driver-class-name: org.h2.Driver
-#    username: sa
-#    password:
+#    url: jdbc:mysql://localhost:3306/hackathon?connectionTimeZone=Asia/Seoul&characterEncoding=UTF-8
+#    username: hackathon
+#    password: 1234
 #  jpa:
 #    hibernate:
 #      ddl-auto: update
+#    show-sql: true
+
+# ---------------------------------------------------------------------------
+# 외부 API 키 (있는 사람만)
+# ---------------------------------------------------------------------------
+#
+# 키가 없어도 앱은 뜹니다. AI 연동 코드는 키가 없으면 목(mock) 으로 동작하도록 만듭니다.
+# 실제 키를 여기 넣어도 이 파일은 .gitignore 에 있어 커밋되지 않습니다.
+# 그래도 팀 채널이나 PR 본문에 붙여넣지 마십시오.
+#
+#app:
+#  ai:
+#    openai:
+#      api-key: sk-...
