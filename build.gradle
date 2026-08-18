@@ -52,6 +52,21 @@ dependencies {
 
 	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	// 로컬에서 MySQL 을 띄우지 않고 ./gradlew bootRun 만으로 앱을 확인하기 위한 것입니다.
+	//
+	// runtimeOnly 가 아니라 developmentOnly 를 씁니다. developmentOnly 는 bootRun 의
+	// 클래스패스에는 들어가지만 bootJar 산출물에서는 제외됩니다. runtimeOnly 로 넣으면
+	// H2 가 app.jar 안으로 따라 들어가고, 운영에서 DB_URL 이 누락된 순간 Boot 가
+	// "인메모리 H2 로 자동 구성" 을 선택해 기동에 성공해 버립니다. 그러면 RDS 에 붙지
+	// 않은 서버가 /health 200 을 반환하고, 배포는 성공으로 판정되며 데이터는 재시작마다
+	// 사라집니다. 이 사고를 막는 것이 이 한 줄의 목적입니다.
+	//
+	// testRuntimeOnly 와 중복이 아닙니다. 두 설정은 서로의 클래스패스에 관여하지 않습니다.
+	//
+	// 주의: developmentOnly 라서 java -jar build/libs/app.jar 로는 H2 를 쓸 수 없습니다.
+	// 로컬에서 H2 로 띄울 때는 반드시 ./gradlew bootRun 을 씁니다.
+	developmentOnly 'com.h2database:h2'
 }
 
 // named('test') 가 아니라 withType(Test) 를 씁니다.

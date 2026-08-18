@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonRawValue;
 import com.hackathon.backend.healthrecord.entity.HealthRecord;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 건강 기록 조회 응답입니다.
  *
@@ -33,7 +35,19 @@ public record HealthRecordResponse(
 		Long id,
 		HealthRecord.HealthType type,
 		String summary,
-		@JsonRawValue String detail,
+		/*
+		 * @JsonRawValue 라 실제 응답에는 JSON 객체가 나가는데, 애노테이션이 없으면
+		 * 스펙에는 문자열(type: string)로 실립니다. 문서와 실제 응답이 어긋나므로
+		 * OverallReportResponse.detail 과 같은 방식으로 타입을 바로잡습니다.
+		 *
+		 * type = "object" 가 아니라 implementation = Object.class 를 씁니다. record
+		 * 컴포넌트에서는 swagger-core 가 선언 타입(String)으로 스키마를 먼저 만든 뒤
+		 * 애노테이션 속성을 덧씌우는데, 이때 type 은 덮이지 않고 description 만
+		 * 반영됩니다. implementation 은 스키마 자체를 교체하므로 확실합니다.
+		 */
+		@JsonRawValue
+		@Schema(implementation = Object.class, description = "타입별 구조화 정보입니다. 없으면 null 입니다.")
+		String detail,
 		LocalDate recordedDate,
 		LocalDateTime recordedAt,
 		BigDecimal confidence,

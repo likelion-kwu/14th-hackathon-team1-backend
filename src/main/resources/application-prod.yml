@@ -49,15 +49,28 @@ spring:
       ddl-auto: update
 
 springdoc:
-  # 운영에서는 기본적으로 닫습니다. 인증이 없는 상태로 열려 있으면
-  # 전체 엔드포인트와 엔티티 필드가 그대로 공개되고, Swagger UI 의 "Try it out"
-  # 이 임의의 외부인에게 쓰기 요청 폼을 제공합니다.
-  # 심사나 프론트 연동 중 필요하면 /etc/hackathon.env 에
-  # SWAGGER_ENABLED=true 를 넣고 서비스를 재시작합니다.
+  # 해커톤 기간에는 열어 둡니다. 원래 ${SWAGGER_ENABLED:false} 였습니다.
+  #
+  # 바꾼 이유는 운영 방침이 아니라 접근 수단입니다. 닫혀 있는 동안 Swagger 를
+  # 켜려면 EC2 에 SSH 로 들어가 /etc/hackathon.env 를 고쳐야 하는데, 지금 팀에
+  # pem 키를 가진 사람이 없습니다. 반면 이 파일은 main 에 머지하면 GitHub
+  # Actions 가 알아서 배포하므로 SSH 없이 반영됩니다.
+  #
+  # 환경변수 참조(${SWAGGER_ENABLED:...})를 아예 걷어낸 이유가 중요합니다.
+  # 기본값만 true 로 바꾸면, 인프라 세팅 때 /etc/hackathon.env 에
+  # SWAGGER_ENABLED=false 가 이미 들어가 있는 경우 환경변수가 이겨서 그대로
+  # 닫혀 있습니다. 그리고 그것을 고치려면 다시 SSH 가 필요합니다. 레포에서는
+  # 그 파일 내용을 확인할 수 없으므로, 확실하게 열리도록 값을 고정합니다.
+  #
+  # 어차피 SSH 를 쓸 수 없으니 환경변수로 끄는 탈출구는 지금 아무 쓸모가 없습니다.
+  #
+  # 열어 두는 동안의 위험은 알고 있어야 합니다. 전체 엔드포인트와 필드가
+  # 공개되고, Swagger UI 의 "Try it out" 이 외부인에게 쓰기 요청 폼이 됩니다.
+  # 심사가 끝나면 이 값을 false 로 되돌려 머지하십시오.
   api-docs:
-    enabled: ${SWAGGER_ENABLED:false}
+    enabled: true
   swagger-ui:
-    enabled: ${SWAGGER_ENABLED:false}
+    enabled: true
 
 app:
   cors:

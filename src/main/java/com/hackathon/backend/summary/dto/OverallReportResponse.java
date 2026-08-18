@@ -34,7 +34,7 @@ public record OverallReportResponse(
 		 * 값을 쓰는 쪽(AI 파이프라인)이 저장 전에 검증해야 합니다.
 		 */
 		@JsonRawValue
-		@Schema(type = "object", description = "프론트엔드용 구조화 보고서 데이터입니다")
+		@Schema(implementation = Object.class, description = "프론트엔드용 구조화 보고서 데이터입니다")
 		String detail,
 
 		int monthlySummaryCount,
