@@ -10,8 +10,11 @@
 | 빌드 | Gradle (wrapper 사용) |
 | DB | 운영 RDS MySQL 8 / 로컬 H2 또는 MySQL |
 | 산출물 | `build/libs/app.jar` |
+| 배포 주소 | `http://52.79.79.220:8080` |
+| **API 명세 (프론트에 주는 링크)** | **http://52.79.79.220:8080/swagger-ui/index.html** |
 
 인프라 구성과 배포 절차는 [`docs/process-and-roles.md`](docs/process-and-roles.md)에 있습니다.
+프론트에 넘길 때 함께 알려야 할 것은 [프론트에 API 명세 넘기기](#프론트에-api-명세-넘기기)에 있습니다.
 
 ---
 
@@ -152,68 +155,81 @@ curl http://localhost:8080/health
 
 A 방식에서 데이터를 확인해야 하면 `show-sql` 로그를 읽거나 조회 API를 직접 호출합니다.
 **테이블을 눈으로 봐야 하면 B(로컬 MySQL)로 가는 것이 맞습니다.**
+
 ---
 
 ## 프론트에 API 명세 넘기기
 
 전체 API는 Swagger로 문서화돼 있습니다. **엔드포인트 20개 전부 성공/실패 응답과 예시가 스펙에 실립니다.**
 
-### 넘기는 방법 — 셋 중 하나
+### 프론트에 줄 주소 — 이것 하나면 됩니다
 
-**pem 키가 없어도 전부 가능합니다.** EC2에 SSH로 들어갈 필요가 없습니다.
+```
+http://52.79.79.220:8080/swagger-ui/index.html
+```
 
-**A. SwaggerHub (지금 당장 · 배포 안 기다림)**
+**지금 열려 있고 별도 설정이 필요 없습니다.** 브라우저에서 바로 열립니다.
+`servers`가 배포 주소로 자동 설정되므로 **"Try it out"도 그대로 동작합니다.**
 
-이 레포는 **public**이라 SwaggerHub가 raw URL을 바로 읽습니다.
-[SwaggerHub Import](https://app.swaggerhub.com) → **Paste URL**에 아래를 넣습니다.
+베이스 URL은 `http://52.79.79.220:8080`입니다(이슈 #1의 인프라 검증 코멘트 기준).
+
+| 주소 | 용도 |
+|---|---|
+| `http://52.79.79.220:8080/swagger-ui/index.html` | **프론트에 주는 링크** |
+| `http://52.79.79.220:8080/v3/api-docs` | OpenAPI 스펙 JSON (codegen용) |
+| `http://52.79.79.220:8080/health` | 서버 상태 확인 |
+
+배포 서버 Swagger는 **항상 현재 코드와 일치합니다.** main에 머지되는 순간 자동 배포되면서
+갱신되므로 따로 할 일이 없습니다.
+
+### `docs/api-docs.json`은 왜 있나
+
+프론트가 `orval`이나 `openapi-typescript`로 타입을 생성할 때 파일이 필요한 경우를 위한
+**스냅샷**입니다. 레포가 public이라 raw URL로도 읽힙니다.
 
 ```
 https://raw.githubusercontent.com/likelion-kwu/14th-hackathon-team1-backend/main/docs/api-docs.json
 ```
 
-**주의: 스냅샷입니다.** API를 고치면 `docs/api-docs.json`을 다시 뽑아 push하고 SwaggerHub에서
-재임포트해야 합니다. 안 하면 프론트가 옛 명세를 봅니다.
-
-**B. 배포 서버 Swagger UI (항상 최신)**
-
-```
-http://<EC2_HOST>:8080/swagger-ui/index.html
-```
-
-`application-prod.yml`의 기본값을 `true`로 바꿔 뒀으므로 **main에 머지하면 자동 배포되면서
-열립니다.** SSH가 필요 없습니다. 스냅샷이 아니라 항상 현재 코드와 일치하므로 A보다 낫습니다.
-
-**C. 스펙 JSON 파일 직접 전달** (codegen에 물릴 때)
-
-`docs/api-docs.json`을 그대로 주면 `orval`이나 `openapi-typescript`에 넣을 수 있습니다.
-
-### 스펙 JSON 다시 뽑기
+**API를 고치면 이 파일은 자동으로 갱신되지 않습니다.** 다시 뽑아서 커밋해야 합니다.
 
 ```bash
 ./gradlew bootRun          # 다른 터미널에서
 curl -s http://localhost:8080/v3/api-docs -o docs/api-docs.json
 ```
 
-JSON의 `servers`에는 뽑아낸 환경의 주소가 박힙니다. 커밋된 파일은 `http://localhost:8080`이라
-**SwaggerHub의 "Try it out"이 배포 서버로 가지 않습니다.** 배포 주소를 실으려면:
+커밋된 파일의 `servers`는 뽑아낸 환경 주소(`http://localhost:8080`)라 배포 서버를 가리키지
+않습니다. 배포 주소를 실으려면 이렇게 뽑습니다.
 
 ```bash
-SPRING_APPLICATION_JSON='{"app":{"api":{"public-url":"http://<EC2_HOST>:8080"}}}' ./gradlew bootRun
+SPRING_APPLICATION_JSON='{"app":{"api":{"public-url":"http://52.79.79.220:8080"}}}' ./gradlew bootRun
 ```
 
 **이 값을 `config/application-local.yml`에 넣지 마십시오.** 넣으면 로컬 Swagger UI의
 "Try it out"이 배포 서버로 요청을 보냅니다.
+
+> 굳이 SwaggerHub 같은 외부 도구에 올릴 이유는 없습니다. 스냅샷이라 고칠 때마다
+> 재임포트해야 하고, Try it out도 CORS로 막힙니다. 배포 서버 Swagger가 상위 호환입니다.
 
 ### CORS — 브라우저에서 호출하려면
 
 Swagger 링크와 별개 문제입니다. EC2의 `CORS_ALLOWED_ORIGINS`에 프론트 origin이 없으면
 브라우저 호출이 차단됩니다. 이 값은 `/etc/hackathon.env`에 있어 **바꾸려면 SSH가 필요합니다.**
 
-- 프론트가 `localhost:5173` / `localhost:3000`이면 이미 들어 있으므로 그대로 됩니다.
-- SwaggerHub 화면의 "Try it out"은 origin이 `app.swaggerhub.com`이라 **차단됩니다.**
-  명세를 읽는 데는 문제없고, 실제 호출은 프론트 앱이나 배포 서버 Swagger UI(B)에서 합니다.
+- 프론트가 `localhost:5173` / `localhost:3000`이면 **이미 들어 있습니다**(응답 헤더로 확인했습니다).
+- Swagger UI 화면에서의 "Try it out"은 서버와 같은 origin이라 CORS와 무관하게 동작합니다.
 - 다른 origin이 필요하면 `application-prod.yml`의 `allowed-origins`에 기본값을 주는 방식으로
   SSH 없이 넓힐 수 있습니다(`${CORS_ALLOWED_ORIGINS:...}`). 팀에 공유하고 하십시오.
+
+### ⚠️ HTTP입니다 — 프론트 배포 시 막힙니다
+
+Swagger를 **보는 것**과 로컬 개발(`localhost`)에서 호출하는 것은 문제없습니다.
+하지만 프론트를 **Vercel 같은 HTTPS 도메인에 배포하면 그 앱에서 `http://` API 호출이
+브라우저에 차단됩니다**(mixed content). 프론트 배포 전에 HTTPS 전환이 필요합니다 —
+[`docs/process-and-roles.md`](docs/process-and-roles.md) 9장에 후속 작업으로 잡혀 있습니다.
+
+8080은 비표준 포트라 일부 학교·회사 네트워크에서 막힐 수 있습니다. 특정 팀원만 안 보이면
+다른 네트워크에서 시도해 보라고 하십시오.
 
 ### 엔드포인트 목록
 
@@ -344,7 +360,9 @@ PR 템플릿(`.github/pull_request_template.md`)이 자동으로 붙습니다. �
 | 앱 기동 실패 (`write-dates-as-timestamps`) | Boot 4의 Jackson 3에서 제거된 설정입니다. 넣지 않습니다 |
 | `/h2-console`이 404 | Boot 4가 H2 콘솔 자동설정을 제거했습니다. 설정으로 살릴 수 없습니다 |
 | 필드를 지웠는데 운영에서 INSERT가 전부 실패 | `ddl-auto: update`는 컬럼을 삭제하지 않습니다. 유령 `NOT NULL` 컬럼이 남았습니다 |
-| 프론트가 Swagger 링크에서 404 | 운영은 `SWAGGER_ENABLED=true` 없이는 닫혀 있습니다 |
+| 프론트가 Swagger 링크에서 404 | 배포가 실패해 옛 jar가 돌고 있습니다. Actions 탭에서 마지막 deploy 결과를 확인합니다 |
+| 프론트가 Swagger 링크에서 응답 없음 | 8080이 막힌 네트워크입니다. 다른 네트워크에서 확인합니다 |
+| HTTPS 프론트에서 API 호출이 차단됨 | 서버가 HTTP라 mixed content로 막힙니다. HTTPS 전환이 필요합니다 |
 
 운영 서버 쪽 문제는 `journalctl -u hackathon -n 100`부터 봅니다.
 그 외 배포·인프라 이슈는 [`docs/process-and-roles.md`](docs/process-and-roles.md)의
