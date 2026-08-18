@@ -40,13 +40,21 @@
 따라서 필드를 지우거나 이름을 바꾸거나 타입을 바꿨다면, **PR에 마이그레이션 SQL을 함께 적고**
 머지 전에 팀에 공유합니다. 혼자 판단해서 머지하지 않습니다.
 
-### 운영 Swagger는 기본으로 닫혀 있습니다
+### 운영 Swagger는 해커톤 동안 열려 있습니다
 
-`application-prod.yml`이 `springdoc`을 `${SWAGGER_ENABLED:false}`로 잠가 뒀습니다. 인증이 없는
-상태로 열어두면 전체 엔드포인트가 공개되고 "Try it out"이 외부인에게 쓰기 폼이 되기 때문입니다.
+`application-prod.yml`을 `${SWAGGER_ENABLED:false}` → **`enabled: true` 고정**으로 바꿨습니다.
+방침이 바뀐 게 아니라 **접근 수단** 때문입니다. 닫혀 있는 동안 Swagger를 켜려면 EC2의
+`/etc/hackathon.env`를 고쳐야 하는데 **지금 팀에 pem 키를 가진 사람이 없습니다.**
+반면 이 파일은 main에 머지하면 GitHub Actions가 알아서 배포하므로 SSH 없이 반영됩니다.
 
-프론트에 공유해야 할 때만 EC2의 `/etc/hackathon.env`에 `SWAGGER_ENABLED=true`를 넣고
-서비스를 재시작합니다. **이걸 안 하고 링크만 주면 프론트는 404를 받습니다.**
+**환경변수 참조를 아예 걷어낸 이유가 중요합니다.** 기본값만 `true`로 바꾸면, 인프라 세팅 때
+`/etc/hackathon.env`에 `SWAGGER_ENABLED=false`가 이미 들어가 있는 경우 환경변수가 이겨서
+그대로 닫혀 있습니다. 그리고 그걸 고치려면 다시 SSH가 필요합니다. 레포에서는 그 파일 내용을
+확인할 수 없으므로 값을 고정했습니다.
+
+**열려 있는 동안의 위험은 알고 있어야 합니다.** 전체 엔드포인트와 필드가 공개되고,
+"Try it out"이 외부인에게 쓰기 요청 폼이 됩니다. **심사가 끝나면 이 값을 `false`로 되돌려
+머지하십시오.**
 
 ---
 
@@ -144,6 +152,132 @@ curl http://localhost:8080/health
 
 A 방식에서 데이터를 확인해야 하면 `show-sql` 로그를 읽거나 조회 API를 직접 호출합니다.
 **테이블을 눈으로 봐야 하면 B(로컬 MySQL)로 가는 것이 맞습니다.**
+---
+
+## 프론트에 API 명세 넘기기
+
+전체 API는 Swagger로 문서화돼 있습니다. **엔드포인트 20개 전부 성공/실패 응답과 예시가 스펙에 실립니다.**
+
+### 넘기는 방법 — 셋 중 하나
+
+**pem 키가 없어도 전부 가능합니다.** EC2에 SSH로 들어갈 필요가 없습니다.
+
+**A. SwaggerHub (지금 당장 · 배포 안 기다림)**
+
+이 레포는 **public**이라 SwaggerHub가 raw URL을 바로 읽습니다.
+[SwaggerHub Import](https://app.swaggerhub.com) → **Paste URL**에 아래를 넣습니다.
+
+```
+https://raw.githubusercontent.com/likelion-kwu/14th-hackathon-team1-backend/main/docs/api-docs.json
+```
+
+**주의: 스냅샷입니다.** API를 고치면 `docs/api-docs.json`을 다시 뽑아 push하고 SwaggerHub에서
+재임포트해야 합니다. 안 하면 프론트가 옛 명세를 봅니다.
+
+**B. 배포 서버 Swagger UI (항상 최신)**
+
+```
+http://<EC2_HOST>:8080/swagger-ui/index.html
+```
+
+`application-prod.yml`의 기본값을 `true`로 바꿔 뒀으므로 **main에 머지하면 자동 배포되면서
+열립니다.** SSH가 필요 없습니다. 스냅샷이 아니라 항상 현재 코드와 일치하므로 A보다 낫습니다.
+
+**C. 스펙 JSON 파일 직접 전달** (codegen에 물릴 때)
+
+`docs/api-docs.json`을 그대로 주면 `orval`이나 `openapi-typescript`에 넣을 수 있습니다.
+
+### 스펙 JSON 다시 뽑기
+
+```bash
+./gradlew bootRun          # 다른 터미널에서
+curl -s http://localhost:8080/v3/api-docs -o docs/api-docs.json
+```
+
+JSON의 `servers`에는 뽑아낸 환경의 주소가 박힙니다. 커밋된 파일은 `http://localhost:8080`이라
+**SwaggerHub의 "Try it out"이 배포 서버로 가지 않습니다.** 배포 주소를 실으려면:
+
+```bash
+SPRING_APPLICATION_JSON='{"app":{"api":{"public-url":"http://<EC2_HOST>:8080"}}}' ./gradlew bootRun
+```
+
+**이 값을 `config/application-local.yml`에 넣지 마십시오.** 넣으면 로컬 Swagger UI의
+"Try it out"이 배포 서버로 요청을 보냅니다.
+
+### CORS — 브라우저에서 호출하려면
+
+Swagger 링크와 별개 문제입니다. EC2의 `CORS_ALLOWED_ORIGINS`에 프론트 origin이 없으면
+브라우저 호출이 차단됩니다. 이 값은 `/etc/hackathon.env`에 있어 **바꾸려면 SSH가 필요합니다.**
+
+- 프론트가 `localhost:5173` / `localhost:3000`이면 이미 들어 있으므로 그대로 됩니다.
+- SwaggerHub 화면의 "Try it out"은 origin이 `app.swaggerhub.com`이라 **차단됩니다.**
+  명세를 읽는 데는 문제없고, 실제 호출은 프론트 앱이나 배포 서버 Swagger UI(B)에서 합니다.
+- 다른 origin이 필요하면 `application-prod.yml`의 `allowed-origins`에 기본값을 주는 방식으로
+  SSH 없이 넓힐 수 있습니다(`${CORS_ALLOWED_ORIGINS:...}`). 팀에 공유하고 하십시오.
+
+### 엔드포인트 목록
+
+`구현` 열이 **스텁**이면 아직 로직이 없습니다. **고정 예시를 반환하고 DB를 읽거나 쓰지 않습니다.**
+요청·응답 형태는 확정된 것이라 프론트가 지금 붙여도 나중에 고칠 필요가 없지만, **돌아오는 값은
+실제 데이터가 아닙니다.**
+
+| 태그 | 메서드 | 경로 | 구현 | 설명 |
+|---|---|---|---|---|
+| member | POST | `/api/members` | 스텁 | 회원 가입 (**201**, Location 헤더) |
+| member | GET | `/api/members/{memberId}` | 스텁 | 회원 조회 |
+| member | PATCH | `/api/members/{memberId}/notification` | 스텁 | 알림 시각·사용 여부 변경 |
+| member | PUT | `/api/members/{memberId}/fcm-token` | 스텁 | FCM 토큰 등록 |
+| engagement | GET | `/api/members/{memberId}/streak` | 스텁 | 스트릭 조회 (기록 없으면 0) |
+| conversation | GET | `/api/conversations` | 스텁 | 대화 목록 (`date` 생략 시 전체 최신순) |
+| conversation | POST | `/api/conversations` | 스텁 | 대화 시작 (오늘 진행 중이면 그것을 반환) |
+| conversation | GET | `/api/conversations/{id}` | 스텁 | 대화 상세 |
+| conversation | GET | `/api/conversations/{id}/messages` | 스텁 | 메시지 목록 (sequenceNo 오름차순) |
+| conversation | POST | `/api/conversations/{id}/messages` | 스텁 | 메시지 전송 (사용자 발화 + AI 응답 함께 반환) |
+| conversation | PATCH | `/api/conversations/{id}/complete` | 스텁 | 대화 종료 (멱등) |
+| health-record | GET | `/api/health-records` | 스텁 | 기간 조회 (기본 최근 7일) |
+| health-record | PATCH | `/api/health-records/{id}/confirm` | 스텁 | 사용자 확인 (멱등) |
+| health-record | GET | `/api/health-records/today` | **완료** | 오늘(KST) 기록 |
+| summary | GET | `/api/summaries/{daily,weekly,monthly,overall}` | **완료** | 요약·리포트 조회 |
+| ai | GET | `/api/ai-analyses` | 스텁 | 분석 작업 상태 조회 |
+| health | GET | `/health` | **완료** | 배포 스모크 (**공통 래퍼 없음**) |
+
+`/api/items`는 `@Hidden`이라 스펙에 나오지 않습니다. 배포 검증용으로 코드만 남겨둔 것입니다.
+
+### 프론트에게 함께 전달할 것
+
+1. **분기는 HTTP 상태 코드가 아니라 `error.code`로 합니다.** 같은 400 안에 `VALIDATION_FAILED`,
+   `MALFORMED_REQUEST`, `BAD_REQUEST`가 있습니다. 가능한 값은 스펙의 `ErrorResponse` enum에 전부 있습니다.
+2. **회원 식별은 `memberId`입니다.** 해커톤 기간에는 로그인을 붙이지 않기로 했으므로 이 형태가
+   그대로 유지됩니다. 가입 응답의 `id`를 보관했다가 씁니다.
+3. **위 표의 "스텁"은 아직 고정 예시만 돌려줍니다.** 화면 레이아웃과 타입은 지금 확정할 수 있지만,
+   실제 데이터가 필요한 검증은 구현 완료 후에 해야 합니다.
+
+### 엔드포인트를 추가할 때 (중요)
+
+성공 응답은 springdoc이 알아서 만들지만 **실패 응답은 그렇지 않습니다.**
+`ApiErrorResponseCustomizer`가 `/api` 아래 모든 엔드포인트에 400과 500을 자동으로 붙이고,
+나머지는 표시를 보고 붙입니다.
+
+| 표시 | 붙는 것 | 언제 |
+|---|---|---|
+| (없음) | 400, 500 | 자동 — 아무것도 안 해도 됩니다 |
+| `@ApiNotFound("...")` | 404 | 없을 수 있는 것을 찾는 엔드포인트 |
+| `@ApiConflict("...")` | 409 | 유니크 제약이 걸린 값을 쓰는 엔드포인트 |
+| `@ApiCreated` | 200 → 201 | `ResponseEntity.created(...)`로 201을 반환할 때 |
+
+`@ApiCreated`를 빠뜨리면 **실제로는 201인데 문서에는 200으로 실립니다.** springdoc은
+`ResponseEntity`의 실제 상태 코드를 알 수 없어 기본값을 씁니다.
+
+DTO 필드에는 `@Schema(description = ..., example = ...)`를 붙입니다. **javadoc의 `@param`은
+스펙에 실리지 않습니다.** springdoc이 javadoc을 읽지 않기 때문입니다.
+
+JSON 원문을 그대로 내보내는 필드(`@JsonRawValue`)에는 `@Schema(implementation = Object.class)`를
+씁니다. `type = "object"`는 record 컴포넌트에서 무시되고 `string`으로 실립니다.
+
+`OpenApiConfigTest`가 위 규칙이 지켜졌는지 검사합니다. 엔드포인트를 추가하면 그 테스트의
+목록에도 한 줄 추가합니다.
+
+
 
 ---
 
