@@ -264,7 +264,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		if (value == HttpStatus.UNSUPPORTED_MEDIA_TYPE.value() || value == HttpStatus.NOT_ACCEPTABLE.value()) {
 			return ErrorCode.UNSUPPORTED_MEDIA_TYPE;
 		}
-		if (value == HttpStatus.PAYLOAD_TOO_LARGE.value()) {
+		// HttpStatus.PAYLOAD_TOO_LARGE 는 Spring 7 에서 deprecated 되었습니다.
+		// RFC 9110 이 413 의 이름을 Content Too Large 로 바꿨기 때문이고, 값(413)은
+		// 같습니다. ErrorCode 쪽 이름은 그대로 둡니다. 프론트가 분기에 쓰는 값이라
+		// 바꾸면 이미 배포된 클라이언트가 깨집니다.
+		if (value == HttpStatus.CONTENT_TOO_LARGE.value()) {
 			return ErrorCode.PAYLOAD_TOO_LARGE;
 		}
 		if (statusCode.is4xxClientError()) {

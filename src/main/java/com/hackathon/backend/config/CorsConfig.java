@@ -40,8 +40,20 @@ public class CorsConfig implements WebMvcConfigurer {
 
 	@Override
 	public void addCorsMappings(CorsRegistry registry) {
+		// allowedOrigins 가 아니라 allowedOriginPatterns 를 씁니다.
+		//
+		// 두 메서드는 정확히 일치하는 origin 에 대해 똑같이 동작하므로 지금 허용
+		// 범위는 달라지지 않습니다. 차이는 와일드카드를 쓸 수 있다는 것뿐입니다.
+		//
+		// 프론트를 Vercel 에 올리면 배포마다 프리뷰 주소가 바뀝니다
+		// (https://<프로젝트>-git-<브랜치>-<팀>.vercel.app). allowedOrigins 로는
+		// 그 주소를 미리 적을 수 없어 배포할 때마다 설정을 고쳐야 합니다.
+		// 패턴이면 https://*.vercel.app 한 줄로 끝납니다.
+		//
+		// 지금 와일드카드를 넣어두지는 않았습니다. 프론트 배포 주소가 아직
+		// 정해지지 않았고, 필요해지면 CORS_ALLOWED_ORIGINS 에 패턴을 추가하면 됩니다.
 		registry.addMapping("/**")
-				.allowedOrigins(corsProperties.allowedOrigins().toArray(String[]::new))
+				.allowedOriginPatterns(corsProperties.allowedOrigins().toArray(String[]::new))
 				.allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
 				.allowedHeaders("*")
 				.maxAge(3600);

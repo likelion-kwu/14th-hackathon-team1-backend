@@ -218,8 +218,15 @@ Swagger 링크와 별개 문제입니다. EC2의 `CORS_ALLOWED_ORIGINS`에 프�
 
 - 프론트가 `localhost:5173` / `localhost:3000`이면 **이미 들어 있습니다**(응답 헤더로 확인했습니다).
 - Swagger UI 화면에서의 "Try it out"은 서버와 같은 origin이라 CORS와 무관하게 동작합니다.
-- 다른 origin이 필요하면 `application-prod.yml`의 `allowed-origins`에 기본값을 주는 방식으로
-  SSH 없이 넓힐 수 있습니다(`${CORS_ALLOWED_ORIGINS:...}`). 팀에 공유하고 하십시오.
+- **와일드카드를 쓸 수 있습니다.** `CorsConfig`가 `allowedOriginPatterns`를 쓰므로
+  `https://*.vercel.app` 같은 패턴이 통합니다. Vercel은 배포마다 프리뷰 주소가 바뀌어서
+  (`https://<프로젝트>-git-<브랜치>-<팀>.vercel.app`) 정확히 일치하는 주소만 받으면
+  배포할 때마다 설정을 고쳐야 합니다.
+- **값 자체를 바꾸려면 여전히 SSH가 필요합니다.** 환경변수가 설정돼 있으면 그쪽이 이깁니다.
+  SSH를 쓸 수 없는데 주소를 추가해야 하면, springdoc에서 했던 것처럼 `application-prod.yml`의
+  환경변수 참조를 걷어내고 값을 직접 적으십시오. **인프라 담당자에게 반드시 공유해야 합니다.**
+- 환경변수가 빠져도 앱은 뜹니다. 기본값(`localhost:5173`, `localhost:3000`)을 넣어 두었습니다.
+  전에는 기본값이 없어서 이 변수가 빠지면 플레이스홀더가 풀리지 않아 **기동 자체가 실패**했습니다.
 
 ### ⚠️ HTTP입니다 — 프론트 배포 시 막힙니다
 
