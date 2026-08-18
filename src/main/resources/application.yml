@@ -63,3 +63,14 @@ app:
     # CORS_ALLOWED_ORIGINS 환경변수로 덮습니다.
     # 여기에 기본값을 두어야 로컬과 테스트에서 환경변수 없이도 컨텍스트가 뜹니다.
     allowed-origins: http://localhost:5173,http://localhost:3000
+
+springdoc:
+  # 이것이 없으면 모든 응답의 content-type 이 */* 로 나갑니다. 컨트롤러가
+  # produces 를 명시하지 않으면 Spring 이 협상 가능한 모든 타입을 뜻하는 */* 를
+  # 스펙에 싣기 때문입니다. 프론트가 스펙에서 코드를 생성할 때(orval,
+  # openapi-typescript 등) */* 는 응답 타입 추론을 포기하게 만듭니다.
+  #
+  # 컨트롤러마다 produces = APPLICATION_JSON_VALUE 를 붙이는 대신 여기 한 줄로
+  # 끝냅니다. 붙이는 방식은 새 컨트롤러에서 빠뜨리기 쉽고, 빠뜨려도 아무 경고가
+  # 없습니다.
+  default-produces-media-type: application/json

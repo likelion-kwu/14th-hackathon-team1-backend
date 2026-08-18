@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hackathon.backend.common.response.ApiResponse;
 
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
@@ -24,6 +25,17 @@ import jakarta.validation.Valid;
  * 응답을 ApiResponse 로 직접 감쌉니다. 전역 자동 래핑을 쓰면 /health 와
  * /v3/api-docs 까지 감싸져 배포 파이프라인과 Swagger 가 깨집니다.
  */
+/*
+ * 스펙에서 숨깁니다. 코드는 남겨 둡니다.
+ *
+ * 프론트에 넘기는 명세에 "쓰면 안 되는 API" 가 섞여 있으면 반드시 누군가 씁니다.
+ * 반면 이 컨트롤러는 RDS 쓰기 경로가 살아 있는지 확인하는 유일한 수단이라
+ * (나머지 엔드포인트는 전부 조회이거나 AI 파이프라인이 채우는 테이블입니다)
+ * 지우지 않고 숨기기만 합니다.
+ *
+ * 본 기획이 확정되고 실제 쓰기 API 가 자리 잡으면 이 클래스를 삭제합니다.
+ */
+@Hidden
 @Tag(name = "item", description = "샘플 CRUD 입니다. 본 기획 확정 후 삭제합니다.")
 @RestController
 @RequestMapping("/api/items")

@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.hackathon.backend.common.response.ApiNotFound;
 import com.hackathon.backend.common.response.ApiResponse;
 import com.hackathon.backend.summary.dto.DailySummaryResponse;
 import com.hackathon.backend.summary.dto.MonthlySummaryResponse;
@@ -41,6 +42,7 @@ public class SummaryController {
 		this.summaryService = summaryService;
 	}
 
+	@ApiNotFound("해당 날짜의 일일 요약이 아직 생성되지 않았습니다.")
 	@Operation(summary = "일일 대화 요약 조회", description = "date 를 생략하면 오늘(KST) 요약을 조회합니다. 없으면 404 입니다.")
 	@GetMapping("/daily")
 	public ApiResponse<DailySummaryResponse> findDaily(
@@ -53,6 +55,7 @@ public class SummaryController {
 		return ApiResponse.success(summaryService.findDaily(memberId, date));
 	}
 
+	@ApiNotFound("해당 기간의 주간 요약이 아직 생성되지 않았습니다.")
 	@Operation(summary = "주간 대화 요약 조회", description = "periodStart 를 생략하면 이번 주 월요일(KST) 기준으로 조회합니다. 없으면 404 입니다.")
 	@GetMapping("/weekly")
 	public ApiResponse<WeeklySummaryResponse> findWeekly(
@@ -65,6 +68,7 @@ public class SummaryController {
 		return ApiResponse.success(summaryService.findWeekly(memberId, periodStart));
 	}
 
+	@ApiNotFound("해당 기간의 월간 요약이 아직 생성되지 않았습니다.")
 	@Operation(summary = "월간 대화 요약 조회", description = "periodStart 를 생략하면 이번 달 1일(KST) 기준으로 조회합니다. 없으면 404 입니다.")
 	@GetMapping("/monthly")
 	public ApiResponse<MonthlySummaryResponse> findMonthly(
@@ -77,6 +81,7 @@ public class SummaryController {
 		return ApiResponse.success(summaryService.findMonthly(memberId, periodStart));
 	}
 
+	@ApiNotFound("아직 생성된 종합 리포트가 없습니다.")
 	@Operation(summary = "종합 리포트 조회", description = "회원당 1건입니다. 없으면 404 입니다.")
 	@GetMapping("/overall")
 	public ApiResponse<OverallReportResponse> findOverall(
