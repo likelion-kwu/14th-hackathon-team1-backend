@@ -1,8 +1,6 @@
 package com.hackathon.backend.healthrecord.controller;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.format.annotation.DateTimeFormat;
@@ -16,7 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.hackathon.backend.common.response.ApiNotFound;
 import com.hackathon.backend.common.response.ApiResponse;
 import com.hackathon.backend.healthrecord.dto.HealthRecordResponse;
-import com.hackathon.backend.healthrecord.entity.HealthRecord;
 import com.hackathon.backend.healthrecord.service.HealthRecordService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,32 +24,15 @@ import jakarta.validation.constraints.Positive;
 /**
  * 건강 기록 조회 API 입니다.
  *
- * 오늘 조회(GET /today)만 실제로 동작합니다. 나머지 둘은 명세 전용 스텁이라
- * 고정 예시를 반환하며, 구현은 이 패키지 담당자가 넣습니다. 스텁에는 서비스도
- * 레포지토리도 걸지 않았으므로 기존 조회 경로에 영향이 없습니다.
- *
  * 클래스에 @Validated 를 붙이지 않습니다. Spring MVC 가 6.1 부터 컨트롤러
  * 파라미터의 jakarta.validation 제약을 자체 처리하고
  * (HandlerMethodValidationException), 공통 예외 핸들러가 이미 그 경로를
  * 다루고 있습니다.
  */
-@Tag(name = "health-record", description = "건강 기록 조회 API 입니다. 기간 조회와 확인은 구현 전이라 고정 예시를 반환합니다.")
+@Tag(name = "health-record", description = "건강 기록 조회 API 입니다.")
 @RestController
 @RequestMapping("/api/health-records")
 public class HealthRecordController {
-
-	/** 스텁 응답입니다. 구현이 들어오면 지웁니다. */
-	private static final HealthRecordResponse SAMPLE = new HealthRecordResponse(
-			1L,
-			HealthRecord.HealthType.SLEEP,
-			"어제 5시간 정도 주무셨습니다.",
-			"{\"hours\": 5, \"quality\": \"POOR\"}",
-			LocalDate.parse("2026-08-19"),
-			LocalDateTime.parse("2026-08-19T07:00:00"),
-			new BigDecimal("0.9200"),
-			"어제 잠을 잘 못 잤어요",
-			HealthRecord.HealthStatus.EXTRACTED,
-			1L);
 
 	private final HealthRecordService healthRecordService;
 
@@ -74,11 +54,11 @@ public class HealthRecordController {
 	}
 
 	/**
-	 * 명세 전용 스텁입니다. 기록이 없으면 빈 배열과 200 을 반환하도록 구현합니다.
+	 * 양쪽 끝을 포함하는 기간으로 조회합니다. 기록이 없으면 빈 배열과 200 을 반환합니다.
 	 */
 	@Operation(summary = "기간 건강 기록 조회",
 			description = "양쪽 끝을 포함하는 기간으로 조회합니다. to 를 생략하면 오늘(KST), from 을 생략하면 to 에서 6일 전입니다. "
-					+ "즉 둘 다 생략하면 최근 7일입니다. (구현 전 · 고정 예시 반환)")
+					+ "즉 둘 다 생략하면 최근 7일입니다.")
 	@GetMapping
 	public ApiResponse<List<HealthRecordResponse>> findRange(
 			@Parameter(description = "회원 식별자입니다", required = true)
@@ -90,26 +70,22 @@ public class HealthRecordController {
 			@Parameter(description = "조회 종료일입니다 (포함). 생략하면 오늘(KST)입니다.")
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
 
-		return ApiResponse.success(List.of(SAMPLE));
+		return ApiResponse.success(healthRecordService.findRange(memberId, from, to));
 	}
 
 	/**
-	 * 명세 전용 스텁입니다. 구현 시 status 를 CONFIRMED 로 올리고, 이미 확인한
-	 * 기록에 다시 와도 성공하도록 둡니다. 확인 버튼이 두 번 눌리는 것은 정상적인
-	 * 흐름입니다.
+	 * status 를 CONFIRMED 로 올립니다. 이미 확인한 기록에 다시 와도 성공합니다 —
+	 * 확인 버튼이 두 번 눌리는 것은 정상적인 흐름입니다.
 	 */
 	@Operation(summary = "건강 기록 확인",
 			description = "AI 가 추출한 기록을 사용자가 확인 처리합니다. status 가 CONFIRMED 로 바뀝니다. "
-					+ "이미 확인한 기록에 다시 보내도 성공합니다. (구현 전 · 고정 예시 반환)")
+					+ "이미 확인한 기록에 다시 보내도 성공합니다.")
 	@ApiNotFound("해당 건강 기록이 없습니다.")
 	@PatchMapping("/{healthRecordId}/confirm")
 	public ApiResponse<HealthRecordResponse> confirm(
 			@Parameter(description = "건강 기록 식별자입니다", required = true)
 			@PathVariable @Positive Long healthRecordId) {
 
-		return ApiResponse.success(new HealthRecordResponse(
-				SAMPLE.id(), SAMPLE.type(), SAMPLE.summary(), SAMPLE.detail(),
-				SAMPLE.recordedDate(), SAMPLE.recordedAt(), SAMPLE.confidence(), SAMPLE.evidence(),
-				HealthRecord.HealthStatus.CONFIRMED, SAMPLE.conversationId()));
+		return ApiResponse.success(healthRecordService.confirm(healthRecordId));
 	}
 }
