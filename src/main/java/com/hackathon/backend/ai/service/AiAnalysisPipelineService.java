@@ -143,7 +143,7 @@ public class AiAnalysisPipelineService {
 				availableHealthTypes);
 
 		overallReportRepository.save(OverallReport.builder()
-				.memberId(analysis.getMember().getId()).member(analysis.getMember()).summary(result.summary())
+				.member(analysis.getMember()).summary(result.summary())
 				.detail(serialize(result.detail())).monthlySummaryCount(monthlySummaries.size()).generatedAt(LocalDateTime.now())
 				.build());
 	}
