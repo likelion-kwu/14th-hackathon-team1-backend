@@ -58,6 +58,9 @@ spring:
     open-in-view: false
 
 app:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
   cors:
     # 로컬 개발용 기본값입니다. 운영에서는 application-prod.yml 이
     # CORS_ALLOWED_ORIGINS 환경변수로 덮습니다.

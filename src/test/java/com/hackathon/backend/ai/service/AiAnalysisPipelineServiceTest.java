@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 import com.hackathon.backend.ai.entity.AiAnalysis;
+import com.hackathon.backend.ai.client.OpenAiChatClient;
 import com.hackathon.backend.conversation.entity.Conversation;
 import com.hackathon.backend.healthrecord.entity.HealthRecord;
 import com.hackathon.backend.member.entity.Member;
@@ -76,6 +77,28 @@ class AiAnalysisPipelineServiceTest {
 	}
 
 	@Test
+	void triggerCallsOpenAiAndPersistsHealthExtraction() {
+		Member member = entityManager.persist(Member.builder().nickname("회원").phone("010-5000-0013").build());
+		Conversation conversation = entityManager.persist(Conversation.builder().member(member)
+				.type(Conversation.ConversationType.CHAT).sessionDate(LocalDate.of(2026, 8, 20)).build());
+		entityManager.persist(com.hackathon.backend.conversation.entity.ConversationMessage.builder()
+				.conversation(conversation).role(com.hackathon.backend.conversation.entity.ConversationMessage.MessageRole.USER)
+				.content("물 300ml를 마셨어요.").sequenceNo(1).build());
+		entityManager.flush();
+
+		pipelineService.trigger(conversation.getId());
+		entityManager.flush();
+		entityManager.clear();
+
+		AiAnalysis analysis = entityManager.getEntityManager().createQuery("select a from AiAnalysis a", AiAnalysis.class)
+				.getSingleResult();
+		assertThat(analysis.getStatus()).isEqualTo(AiAnalysis.AnalysisStatus.SUCCESS);
+		assertThat(analysis.getModelName()).isEqualTo("gpt-4o-mini");
+		assertThat(entityManager.getEntityManager().createQuery("select h from HealthRecord h", HealthRecord.class).getResultList())
+				.singleElement().extracting(HealthRecord::getType).isEqualTo(HealthRecord.HealthType.WATER);
+	}
+
+	@Test
 	void calculatesOverallReportValidationContextFromExistingData() {
 		Member member = entityManager.persist(Member.builder().nickname("회원").phone("010-5000-0012").build());
 		entityManager.persist(MonthlyConversationSummary.builder().member(member).periodStart(LocalDate.of(2026, 1, 1))
@@ -108,6 +131,15 @@ class AiAnalysisPipelineServiceTest {
 		@Bean
 		ObjectMapper objectMapper() {
 			return JsonMapper.builder().build();
+		}
+
+		@Bean
+		OpenAiChatClient openAiChatClient() {
+			return (systemPrompt, userPrompt) -> """
+					{"schemaVersion":"health-extraction-v1","records":[{
+					"type":"WATER","summary":"물 300ml를 마셨습니다.","detail":{"amount":300,"unit":"ml"},
+					"recordedDate":"2026-08-20","recordedAt":null,"confidence":0.9,"evidence":"물 300ml"
+					}]}""";
 		}
 	}
 }
