@@ -44,7 +44,7 @@ public record AiAnalysisResponse(
 				example = "SUCCESS")
 		AiAnalysis.AnalysisStatus status,
 
-		@Schema(description = "사용한 모델 이름입니다. 아직 실행 전이면 null 입니다.", example = "claude-opus-5",
+		@Schema(description = "사용한 모델 이름입니다. 아직 실행 전이면 null 입니다.", example = "gpt-4o-mini",
 				nullable = true)
 		String modelName,
 
