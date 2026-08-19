@@ -56,4 +56,17 @@ public record AiAnalysisResponse(
 
 		@Schema(description = "마지막 수정 시각입니다.", example = "2026-08-19T21:12:30")
 		LocalDateTime updatedAt) {
+
+	public static AiAnalysisResponse from(AiAnalysis analysis) {
+		return new AiAnalysisResponse(
+				analysis.getId(),
+				analysis.getMember().getId(),
+				analysis.getConversation() == null ? null : analysis.getConversation().getId(),
+				analysis.getTaskType(),
+				analysis.getStatus(),
+				analysis.getModelName(),
+				analysis.getSchemaVersion(),
+				analysis.getCreatedAt(),
+				analysis.getUpdatedAt());
+	}
 }
