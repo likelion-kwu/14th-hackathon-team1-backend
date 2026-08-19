@@ -1,6 +1,7 @@
 package com.hackathon.backend.healthrecord.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -15,6 +16,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
 import com.hackathon.backend.conversation.entity.Conversation;
+import com.hackathon.backend.common.exception.NotFoundException;
 import com.hackathon.backend.healthrecord.dto.HealthRecordResponse;
 import com.hackathon.backend.healthrecord.entity.HealthRecord;
 import com.hackathon.backend.member.entity.Member;
@@ -216,5 +218,135 @@ class HealthRecordServiceTest {
 		// 저장되는 것은 충분히 있을 수 있는 경우라 여기서 막습니다.
 		assertThat(found).hasSize(1);
 		assertThat(found.get(0).detail()).isNull();
+	}
+
+	@Test
+	@DisplayName("기간 조회는 양끝 날짜를 포함하고 recordedDate, recordedAt, id 순으로 정렬합니다")
+	void findsRangeInclusivelyAndSortsByDateTimeThenId() {
+		Member member = persistMember("010-3000-0010");
+		LocalDate from = LocalDate.of(2026, 8, 10);
+		LocalDate to = LocalDate.of(2026, 8, 12);
+		entityManager.persist(baseRecord(member, from).summary("시작일").build());
+		entityManager.persist(baseRecord(member, to).summary("끝날 null 시간 1").build());
+		entityManager.persist(baseRecord(member, to).summary("끝날 null 시간 2").build());
+		entityManager.persist(HealthRecord.builder()
+				.member(member).type(HealthRecord.HealthType.SLEEP).summary("끝날 늦은 시간")
+				.recordedDate(to).recordedAt(LocalDateTime.of(2026, 8, 12, 9, 0)).build());
+		entityManager.persist(HealthRecord.builder()
+				.member(member).type(HealthRecord.HealthType.SLEEP).summary("끝날 이른 시간")
+				.recordedDate(to).recordedAt(LocalDateTime.of(2026, 8, 12, 7, 0)).build());
+		entityManager.persist(baseRecord(member, from.minusDays(1)).summary("범위 밖").build());
+		entityManager.flush();
+		entityManager.clear();
+
+		List<HealthRecordResponse> found = healthRecordService.findRange(member.getId(), from, to);
+
+		assertThat(found).extracting(HealthRecordResponse::summary)
+				.containsExactly("시작일", "끝날 이른 시간", "끝날 늦은 시간", "끝날 null 시간 1", "끝날 null 시간 2");
+	}
+
+	@Test
+	@DisplayName("from 과 to 를 생략하면 KST 기준 최근 7일 기록을 반환합니다")
+	void defaultsBothRangeBoundsToRecentSevenDays() {
+		Member member = persistMember("010-3000-0011");
+		entityManager.persist(baseRecord(member, today().minusDays(6)).summary("7일 범위 시작").build());
+		entityManager.persist(baseRecord(member, today()).summary("오늘").build());
+		entityManager.persist(baseRecord(member, today().minusDays(7)).summary("범위 밖").build());
+		entityManager.flush();
+		entityManager.clear();
+
+		List<HealthRecordResponse> found = healthRecordService.findRange(member.getId(), null, null);
+
+		assertThat(found).extracting(HealthRecordResponse::summary)
+				.containsExactly("7일 범위 시작", "오늘");
+	}
+
+	@Test
+	@DisplayName("from 을 생략하면 to 에서 6일 전을 시작일로 사용합니다")
+	void defaultsMissingFromRelativeToTo() {
+		Member member = persistMember("010-3000-0012");
+		LocalDate to = LocalDate.of(2026, 8, 16);
+		entityManager.persist(baseRecord(member, to.minusDays(6)).summary("기본 시작일").build());
+		entityManager.persist(baseRecord(member, to).summary("종료일").build());
+		entityManager.persist(baseRecord(member, to.minusDays(7)).summary("범위 밖").build());
+		entityManager.flush();
+		entityManager.clear();
+
+		List<HealthRecordResponse> found = healthRecordService.findRange(member.getId(), null, to);
+
+		assertThat(found).extracting(HealthRecordResponse::summary)
+				.containsExactly("기본 시작일", "종료일");
+	}
+
+	@Test
+	@DisplayName("to 를 생략하면 KST 기준 오늘을 종료일로 사용합니다")
+	void defaultsMissingToToTodayInKst() {
+		Member member = persistMember("010-3000-0013");
+		LocalDate from = today().minusDays(1);
+		entityManager.persist(baseRecord(member, from).summary("시작일").build());
+		entityManager.persist(baseRecord(member, today()).summary("오늘").build());
+		entityManager.persist(baseRecord(member, today().plusDays(1)).summary("내일").build());
+		entityManager.flush();
+		entityManager.clear();
+
+		List<HealthRecordResponse> found = healthRecordService.findRange(member.getId(), from, null);
+
+		assertThat(found).extracting(HealthRecordResponse::summary)
+				.containsExactly("시작일", "오늘");
+	}
+
+	@Test
+	@DisplayName("기간 내 기록이 없거나 존재하지 않는 memberId 여도 빈 목록을 반환합니다")
+	void returnsEmptyForMissingRangeRecordsAndUnknownMember() {
+		Member member = persistMember("010-3000-0014");
+		entityManager.persist(baseRecord(member, LocalDate.of(2026, 8, 1)).summary("범위 밖").build());
+		entityManager.flush();
+		entityManager.clear();
+
+		assertThat(healthRecordService.findRange(member.getId(), LocalDate.of(2026, 8, 10), LocalDate.of(2026, 8, 16)))
+				.isEmpty();
+		assertThat(healthRecordService.findRange(999_999L, LocalDate.of(2026, 8, 10), LocalDate.of(2026, 8, 16)))
+				.isEmpty();
+	}
+
+	@Test
+	@DisplayName("건강 기록을 확인하면 CONFIRMED 상태로 저장하고 반환합니다")
+	void confirmsRecord() {
+		Member member = persistMember("010-3000-0015");
+		HealthRecord record = entityManager.persist(baseRecord(member, today()).summary("확인할 기록").build());
+		entityManager.flush();
+		entityManager.clear();
+
+		HealthRecordResponse confirmed = healthRecordService.confirm(record.getId());
+		entityManager.flush();
+		entityManager.clear();
+
+		assertThat(confirmed.status()).isEqualTo(HealthRecord.HealthStatus.CONFIRMED);
+		assertThat(entityManager.find(HealthRecord.class, record.getId()).getStatus())
+				.isEqualTo(HealthRecord.HealthStatus.CONFIRMED);
+	}
+
+	@Test
+	@DisplayName("확인할 건강 기록이 없으면 NotFoundException 을 던집니다")
+	void throwsNotFoundWhenConfirmingMissingRecord() {
+		assertThatThrownBy(() -> healthRecordService.confirm(999_999L))
+				.isInstanceOf(NotFoundException.class);
+	}
+
+	@Test
+	@DisplayName("이미 CONFIRMED 인 건강 기록을 다시 확인해도 성공합니다")
+	void confirmsAlreadyConfirmedRecordIdempotently() {
+		Member member = persistMember("010-3000-0016");
+		HealthRecord record = entityManager.persist(HealthRecord.builder()
+				.member(member).type(HealthRecord.HealthType.SLEEP).summary("이미 확인한 기록")
+				.recordedDate(today()).status(HealthRecord.HealthStatus.CONFIRMED).build());
+		entityManager.flush();
+		entityManager.clear();
+
+		HealthRecordResponse first = healthRecordService.confirm(record.getId());
+		HealthRecordResponse second = healthRecordService.confirm(record.getId());
+
+		assertThat(first.status()).isEqualTo(HealthRecord.HealthStatus.CONFIRMED);
+		assertThat(second.status()).isEqualTo(HealthRecord.HealthStatus.CONFIRMED);
 	}
 }

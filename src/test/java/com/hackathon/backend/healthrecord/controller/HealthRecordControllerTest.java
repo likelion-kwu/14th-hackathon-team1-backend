@@ -2,6 +2,7 @@ package com.hackathon.backend.healthrecord.controller;
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -21,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.hackathon.backend.healthrecord.dto.HealthRecordResponse;
 import com.hackathon.backend.healthrecord.entity.HealthRecord;
 import com.hackathon.backend.healthrecord.service.HealthRecordService;
+import com.hackathon.backend.common.exception.NotFoundException;
 
 /**
  * GET /api/health-records/today 의 웹 계층 계약을 고정합니다.
@@ -130,5 +132,87 @@ class HealthRecordControllerTest {
 		mockMvc.perform(get("/api/health-records/today").param("memberId", "-1"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+	}
+
+	@Test
+	@DisplayName("기간 조회는 200 과 공통 래퍼의 data 배열을 반환합니다")
+	void returnsRangeHealthRecordsAsArray() throws Exception {
+		given(healthRecordService.findRange(1L, LocalDate.of(2026, 8, 10), LocalDate.of(2026, 8, 16)))
+				.willReturn(List.of(recordWithDetail(null)));
+
+		mockMvc.perform(get("/api/health-records")
+				.param("memberId", "1")
+				.param("from", "2026-08-10")
+				.param("to", "2026-08-16"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data").isArray())
+				.andExpect(jsonPath("$.data[0].id").value(1))
+				.andExpect(jsonPath("$.error").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("기간 조회의 memberId 가 없으면 400 을 반환합니다")
+	void rejectsMissingMemberIdForRange() throws Exception {
+		mockMvc.perform(get("/api/health-records"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("기간 조회의 memberId 가 0 이면 400 과 VALIDATION_FAILED 를 반환합니다")
+	void rejectsZeroMemberIdForRange() throws Exception {
+		mockMvc.perform(get("/api/health-records").param("memberId", "0"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+	}
+
+	@Test
+	@DisplayName("기간 조회의 memberId 가 음수이면 400 과 VALIDATION_FAILED 를 반환합니다")
+	void rejectsNegativeMemberIdForRange() throws Exception {
+		mockMvc.perform(get("/api/health-records").param("memberId", "-1"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+	}
+
+	@Test
+	@DisplayName("건강 기록 확인은 CONFIRMED 상태와 함께 200 을 반환합니다")
+	void confirmsHealthRecord() throws Exception {
+		given(healthRecordService.confirm(1L)).willReturn(new HealthRecordResponse(
+				1L, HealthRecord.HealthType.SLEEP, "수면 기록", null,
+				LocalDate.of(2026, 8, 16), null, null, null,
+				HealthRecord.HealthStatus.CONFIRMED, null));
+
+		mockMvc.perform(patch("/api/health-records/{healthRecordId}/confirm", 1L))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+	}
+
+	@Test
+	@DisplayName("확인할 건강 기록이 없으면 404 와 NOT_FOUND 를 반환합니다")
+	void returnsNotFoundWhenConfirmingMissingRecord() throws Exception {
+		given(healthRecordService.confirm(999L))
+				.willThrow(new NotFoundException("건강 기록을 찾을 수 없습니다."));
+
+		mockMvc.perform(patch("/api/health-records/{healthRecordId}/confirm", 999L))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
+	}
+
+	@Test
+	@DisplayName("이미 확인한 건강 기록을 다시 확인해도 200 을 반환합니다")
+	void confirmsAlreadyConfirmedRecordIdempotently() throws Exception {
+		HealthRecordResponse confirmed = new HealthRecordResponse(
+				1L, HealthRecord.HealthType.SLEEP, "수면 기록", null,
+				LocalDate.of(2026, 8, 16), null, null, null,
+				HealthRecord.HealthStatus.CONFIRMED, null);
+		given(healthRecordService.confirm(1L)).willReturn(confirmed);
+
+		mockMvc.perform(patch("/api/health-records/{healthRecordId}/confirm", 1L))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+		mockMvc.perform(patch("/api/health-records/{healthRecordId}/confirm", 1L))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.status").value("CONFIRMED"));
 	}
 }
