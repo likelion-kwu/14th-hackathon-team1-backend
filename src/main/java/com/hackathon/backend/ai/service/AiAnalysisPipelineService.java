@@ -26,6 +26,7 @@ import com.hackathon.backend.conversation.repository.ConversationRepository;
 import com.hackathon.backend.healthrecord.entity.HealthRecord;
 import com.hackathon.backend.healthrecord.entity.HealthRecord.HealthType;
 import com.hackathon.backend.healthrecord.repository.HealthRecordRepository;
+import com.hackathon.backend.member.entity.Member;
 import com.hackathon.backend.summary.entity.DailyConversationSummary;
 import com.hackathon.backend.summary.entity.MonthlyConversationSummary;
 import com.hackathon.backend.summary.entity.OverallReport;
@@ -97,15 +98,35 @@ public class AiAnalysisPipelineService {
 	public void trigger(Long conversationId) {
 		Conversation conversation = conversationRepository.findById(conversationId)
 				.orElseThrow(() -> new NotFoundException("Conversation not found"));
-		AiAnalysis analysis = lifecycleService.create(conversation.getMember(), conversation, TaskType.HEALTH_EXTRACTION);
-		lifecycleService.markProcessing(analysis.getId(), "gpt-4o-mini", "health-extraction-v1");
+		execute(conversation.getMember(), conversation, TaskType.HEALTH_EXTRACTION,
+				healthExtractionSystemPrompt(), conversationTranscript(conversation), new AiAnalysisTaskContext.HealthExtraction());
+	}
 
+	/**
+	 * 대화 완료 훅과 스케줄/온디맨드 요약이 공유하는 실행 경계입니다.
+	 * 호출자는 입력이 비어 있지 않음을 먼저 보장해야 하므로, 이 메서드는 항상 분석 작업을 생성합니다.
+	 */
+	public AiAnalysis execute(Member member, Conversation conversation, TaskType taskType, String systemPrompt,
+			String userPrompt, AiAnalysisTaskContext context) {
+		AiAnalysis analysis = lifecycleService.create(member, conversation, taskType);
+		lifecycleService.markProcessing(analysis.getId(), "gpt-4o-mini", schemaVersion(taskType));
 		try {
-			String rawResponse = completeWithRetry(healthExtractionSystemPrompt(), conversationTranscript(conversation));
-			persist(analysis.getId(), rawResponse, new AiAnalysisTaskContext.HealthExtraction());
+			String rawResponse = completeWithRetry(systemPrompt, userPrompt);
+			persist(analysis.getId(), rawResponse, context);
 		} catch (Exception e) {
 			lifecycleService.markFailed(analysis.getId(), errorMessage(e));
 		}
+		return analysis;
+	}
+
+	private String schemaVersion(TaskType taskType) {
+		return switch (taskType) {
+			case HEALTH_EXTRACTION -> "health-extraction-v1";
+			case DAILY_SUMMARY -> "daily-summary-v1";
+			case WEEKLY_SUMMARY -> "weekly-summary-v1";
+			case MONTHLY_SUMMARY -> "monthly-summary-v1";
+			case OVERALL_REPORT -> "overall-report-v1";
+		};
 	}
 
 	private String completeWithRetry(String systemPrompt, String userPrompt) {
@@ -229,23 +250,33 @@ public class AiAnalysisPipelineService {
 	private void persistOverallReport(AiAnalysis analysis, String rawResponse, AiAnalysisTaskContext.OverallReport context) {
 		List<MonthlyConversationSummary> monthlySummaries = monthlyConversationSummaryRepository
 				.findByMemberIdOrderByPeriodStartAsc(analysis.getMember().getId());
-		if (monthlySummaries.isEmpty()) {
+		List<HealthRecord> allHealthRecords = healthRecordRepository
+				.findByMemberIdOrderByRecordedDateAsc(analysis.getMember().getId());
+		if (monthlySummaries.isEmpty() && allHealthRecords.isEmpty()) {
 			throw new AiResultValidationException("OVERALL_REPORT는 월간 요약 또는 건강 기록이 있을 때만 생성할 수 있습니다.");
 		}
 
-		LocalDate expectedPeriodStart = monthlySummaries.get(0).getPeriodStart();
-		LocalDate expectedPeriodEnd = monthlySummaries.get(monthlySummaries.size() - 1).getPeriodEnd();
-		List<HealthRecord> healthRecords = healthRecordRepository.findByMemberIdAndRecordedDateBetween(
-				analysis.getMember().getId(), expectedPeriodStart, expectedPeriodEnd);
-		Set<HealthType> availableHealthTypes = healthRecords.stream().map(HealthRecord::getType)
+		LocalDate expectedPeriodStart = monthlySummaries.stream().map(MonthlyConversationSummary::getPeriodStart)
+				.reduce((left, right) -> left.isBefore(right) ? left : right)
+				.orElseGet(() -> allHealthRecords.get(0).getRecordedDate());
+		expectedPeriodStart = allHealthRecords.stream().map(HealthRecord::getRecordedDate)
+				.reduce(expectedPeriodStart, (left, right) -> left.isBefore(right) ? left : right);
+		LocalDate expectedPeriodEnd = monthlySummaries.stream().map(MonthlyConversationSummary::getPeriodEnd)
+				.reduce((left, right) -> left.isAfter(right) ? left : right)
+				.orElseGet(() -> allHealthRecords.get(allHealthRecords.size() - 1).getRecordedDate());
+		expectedPeriodEnd = allHealthRecords.stream().map(HealthRecord::getRecordedDate)
+				.reduce(expectedPeriodEnd, (left, right) -> left.isAfter(right) ? left : right);
+		Set<HealthType> availableHealthTypes = allHealthRecords.stream().map(HealthRecord::getType)
 				.collect(Collectors.toUnmodifiableSet());
 		OverallReportResult result = resultParser.parseOverallReport(rawResponse, expectedPeriodStart, expectedPeriodEnd,
 				availableHealthTypes);
 
-		overallReportRepository.save(OverallReport.builder()
-				.member(analysis.getMember()).summary(result.summary())
-				.detail(serialize(result.detail())).monthlySummaryCount(monthlySummaries.size()).generatedAt(LocalDateTime.now())
-				.build());
+		LocalDateTime generatedAt = LocalDateTime.now();
+		overallReportRepository.findById(analysis.getMember().getId()).ifPresentOrElse(
+				report -> report.refresh(result.summary(), serialize(result.detail()), monthlySummaries.size(), generatedAt),
+				() -> overallReportRepository.save(OverallReport.builder()
+						.member(analysis.getMember()).summary(result.summary()).detail(serialize(result.detail()))
+						.monthlySummaryCount(monthlySummaries.size()).generatedAt(generatedAt).build()));
 	}
 
 	private void validatePeriod(LocalDate periodStart, LocalDate periodEnd, int sourceCount, int tokenCount, String label) {

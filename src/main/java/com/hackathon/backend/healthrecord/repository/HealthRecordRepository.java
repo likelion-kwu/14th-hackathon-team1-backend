@@ -27,4 +27,7 @@ public interface HealthRecordRepository extends JpaRepository<HealthRecord, Long
 	List<HealthRecord> findByMemberIdAndRecordedDate(Long memberId, LocalDate recordedDate);
 
 	List<HealthRecord> findByMemberIdAndRecordedDateBetween(Long memberId, LocalDate start, LocalDate end);
+
+	/** 종합 리포트의 전체 기간과 통계를 계산하기 위한 회원의 건강 기록 전체 조회입니다. */
+	List<HealthRecord> findByMemberIdOrderByRecordedDateAsc(Long memberId);
 }

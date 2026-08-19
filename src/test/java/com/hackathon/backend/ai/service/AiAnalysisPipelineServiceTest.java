@@ -149,6 +149,29 @@ class AiAnalysisPipelineServiceTest {
 		assertThat(report.getDetail()).contains("WATER");
 	}
 
+	@Test
+	void persistsOverallReportWhenOnlyHealthRecordsExist() {
+		Member member = entityManager.persist(Member.builder().nickname("회원").phone("010-5000-0015").build());
+		entityManager.persist(HealthRecord.builder().member(member).type(HealthRecord.HealthType.WATER).summary("물 기록")
+				.detail("{\"amount\":300}").recordedDate(LocalDate.of(2026, 3, 10)).confidence(BigDecimal.ONE)
+				.evidence("물 마셨음").build());
+		AiAnalysis analysis = lifecycleService.create(member, null, AiAnalysis.TaskType.OVERALL_REPORT);
+		lifecycleService.markProcessing(analysis.getId(), "test-model", "overall-report-v1");
+
+		pipelineService.persist(analysis.getId(), """
+				{"schemaVersion":"overall-report-v1","summary":"건강 기록 기반 리포트","detail":{
+				"period":{"from":"2026-03-10","to":"2026-03-10"},"highlights":[],
+				"healthTrends":[],"recommendations":[]
+				}}""", new AiAnalysisTaskContext.OverallReport());
+		entityManager.flush();
+		entityManager.clear();
+
+		AiAnalysis succeeded = entityManager.find(AiAnalysis.class, analysis.getId());
+		OverallReport report = entityManager.find(OverallReport.class, member.getId());
+		assertThat(succeeded.getStatus()).isEqualTo(AiAnalysis.AnalysisStatus.SUCCESS);
+		assertThat(report.getMonthlySummaryCount()).isZero();
+	}
+
 	@TestConfiguration
 	static class JacksonConfiguration {
 		@Bean
