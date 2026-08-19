@@ -64,6 +64,12 @@ weekly_conversation_summary ×4 → (monthly-summary-v1) → monthly_conversatio
 }
 ```
 
+`periodStart`/`periodEnd`는 캘린더 월(1일~말일)로 고정입니다(`MonthlyConversationSummary`
+엔티티 규칙과 동일). `weeklySummaries`는 "정확히 4개"가 아니라 **이 캘린더 월 안에서
+시작하는 `WeeklyConversationSummary` 전체**를 오래된 순으로 넣습니다 — 월 경계에 걸치는
+주 배치에 따라 4개 또는 5개가 될 수 있습니다. 몇 개가 들어오든 AI는 받은 만큼만
+요약합니다(`daily`→`weekly`의 "결측일 허용"과 같은 원칙).
+
 ## 출력
 
 세 단계 모두 동일한 출력 형태이며 `schemaVersion` 값만 다릅니다.
