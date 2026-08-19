@@ -62,7 +62,15 @@ class AiAnalysisLifecycleServiceTest {
 	void recordsFailureAndRejectsRestart() {
 		AiAnalysis analysis = lifecycleService.create(persistMember("010-5000-0003"), null,
 				AiAnalysis.TaskType.OVERALL_REPORT);
-		lifecycleService.markFailed(analysis.getId(), "응답 형식이 올바르지 않습니다.");
+		String rawResponse = "this is not JSON";
+		lifecycleService.markFailed(analysis.getId(), rawResponse, "응답 형식이 올바르지 않습니다.");
+		entityManager.flush();
+		entityManager.clear();
+
+		AiAnalysis failed = entityManager.find(AiAnalysis.class, analysis.getId());
+		assertThat(failed.getStatus()).isEqualTo(AiAnalysis.AnalysisStatus.FAILED);
+		assertThat(failed.getRawResponse()).isEqualTo(rawResponse);
+		assertThat(failed.getErrorMessage()).isEqualTo("응답 형식이 올바르지 않습니다.");
 
 		assertThatThrownBy(() -> lifecycleService.markProcessing(analysis.getId(), "test-model", "v1"))
 				.isInstanceOf(IllegalStateException.class);
