@@ -99,6 +99,10 @@ public class HealthRecord {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    public void confirm() {
+        this.status = HealthStatus.CONFIRMED;
+    }
+
     public enum HealthType {
         SLEEP, MEAL, EXERCISE, SKIN, MOOD, WATER, OTHER
     }

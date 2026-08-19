@@ -179,8 +179,8 @@ Swagger를 **보는 것**과 로컬 개발(`localhost`)에서 호출하는 것�
 | conversation | GET | `/api/conversations/{id}/messages` | 스텁 | 메시지 목록 (sequenceNo 오름차순) |
 | conversation | POST | `/api/conversations/{id}/messages` | 스텁 | 메시지 전송 (사용자 발화 + AI 응답 함께 반환) |
 | conversation | PATCH | `/api/conversations/{id}/complete` | 스텁 | 대화 종료 (멱등) |
-| health-record | GET | `/api/health-records` | 스텁 | 기간 조회 (기본 최근 7일) |
-| health-record | PATCH | `/api/health-records/{id}/confirm` | 스텁 | 사용자 확인 (멱등) |
+| health-record | GET | `/api/health-records` | **완료** | 기간 조회 (기본 최근 7일) |
+| health-record | PATCH | `/api/health-records/{id}/confirm` | **완료** | 사용자 확인 (멱등) |
 | health-record | GET | `/api/health-records/today` | **완료** | 오늘(KST) 기록 |
 | summary | GET | `/api/summaries/{daily,weekly,monthly,overall}` | **완료** | 요약·리포트 조회 |
 | ai | GET | `/api/ai-analyses` | 스텁 | 분석 작업 상태 조회 |
