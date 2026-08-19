@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hackathon.backend.ai.dto.AiAnalysisResponse;
 import com.hackathon.backend.ai.service.AiSummaryGenerationService;
+import com.hackathon.backend.common.response.ApiNotFound;
 import com.hackathon.backend.common.response.ApiResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +28,7 @@ public class OverallReportGenerationController {
 	}
 
 	@Operation(summary = "종합 리포트 생성 또는 갱신", description = "월간 요약 또는 건강 기록이 있을 때 즉시 AI 작업을 실행합니다.")
+	@ApiNotFound("회원을 찾을 수 없거나 종합 리포트를 생성할 데이터가 없습니다.")
 	@PostMapping("/overall-report")
 	public ApiResponse<AiAnalysisResponse> generateOverall(
 			@Parameter(description = "회원 식별자", required = true)
