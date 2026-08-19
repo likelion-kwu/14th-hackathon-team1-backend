@@ -1,6 +1,7 @@
 package com.hackathon.backend.summary.repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,4 +17,6 @@ import com.hackathon.backend.summary.entity.MonthlyConversationSummary;
 public interface MonthlyConversationSummaryRepository extends JpaRepository<MonthlyConversationSummary, Long> {
 
 	Optional<MonthlyConversationSummary> findByMemberIdAndPeriodStart(Long memberId, LocalDate periodStart);
+
+	List<MonthlyConversationSummary> findByMemberIdOrderByPeriodStartAsc(Long memberId);
 }
