@@ -4,17 +4,25 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 
 import com.hackathon.backend.ai.dto.ConversationSummaryResult;
 import com.hackathon.backend.ai.dto.OverallReportResult;
+import com.hackathon.backend.ai.client.OpenAiChatClient;
 import com.hackathon.backend.ai.entity.AiAnalysis;
 import com.hackathon.backend.ai.entity.AiAnalysis.TaskType;
 import com.hackathon.backend.ai.repository.AiAnalysisRepository;
 import com.hackathon.backend.common.exception.NotFoundException;
+import com.hackathon.backend.conversation.entity.Conversation;
+import com.hackathon.backend.conversation.entity.ConversationMessage;
+import com.hackathon.backend.conversation.repository.ConversationMessageRepository;
+import com.hackathon.backend.conversation.repository.ConversationRepository;
 import com.hackathon.backend.healthrecord.entity.HealthRecord;
 import com.hackathon.backend.healthrecord.entity.HealthRecord.HealthType;
 import com.hackathon.backend.healthrecord.repository.HealthRecordRepository;
@@ -37,6 +45,8 @@ import tools.jackson.databind.ObjectMapper;
 @Transactional
 public class AiAnalysisPipelineService {
 
+	private static final int MAX_OPENAI_ATTEMPTS = 3;
+	private static final long RETRY_JITTER_MILLIS = 500;
 	private final AiAnalysisRepository aiAnalysisRepository;
 	private final AiAnalysisLifecycleService lifecycleService;
 	private final AiResultParser resultParser;
@@ -47,6 +57,9 @@ public class AiAnalysisPipelineService {
 	private final OverallReportRepository overallReportRepository;
 	private final HealthRecordRepository healthRecordRepository;
 	private final ObjectMapper objectMapper;
+	private final ConversationRepository conversationRepository;
+	private final ConversationMessageRepository conversationMessageRepository;
+	private final OpenAiChatClient openAiChatClient;
 
 	public AiAnalysisPipelineService(
 			AiAnalysisRepository aiAnalysisRepository,
@@ -58,7 +71,10 @@ public class AiAnalysisPipelineService {
 			MonthlyConversationSummaryRepository monthlyConversationSummaryRepository,
 			OverallReportRepository overallReportRepository,
 			HealthRecordRepository healthRecordRepository,
-			ObjectMapper objectMapper) {
+			ObjectMapper objectMapper,
+			ConversationRepository conversationRepository,
+			ConversationMessageRepository conversationMessageRepository,
+			OpenAiChatClient openAiChatClient) {
 		this.aiAnalysisRepository = aiAnalysisRepository;
 		this.lifecycleService = lifecycleService;
 		this.resultParser = resultParser;
@@ -69,6 +85,90 @@ public class AiAnalysisPipelineService {
 		this.overallReportRepository = overallReportRepository;
 		this.healthRecordRepository = healthRecordRepository;
 		this.objectMapper = objectMapper;
+		this.conversationRepository = conversationRepository;
+		this.conversationMessageRepository = conversationMessageRepository;
+		this.openAiChatClient = openAiChatClient;
+	}
+
+	/**
+	 * Public conversation-completion hook. Call this immediately after a conversation is completed.
+	 * Model failures are retained on the AI analysis task and do not alter the completed conversation state.
+	 */
+	public void trigger(Long conversationId) {
+		Conversation conversation = conversationRepository.findById(conversationId)
+				.orElseThrow(() -> new NotFoundException("Conversation not found"));
+		AiAnalysis analysis = lifecycleService.create(conversation.getMember(), conversation, TaskType.HEALTH_EXTRACTION);
+		lifecycleService.markProcessing(analysis.getId(), "gpt-4o-mini", "health-extraction-v1");
+
+		try {
+			String rawResponse = completeWithRetry(healthExtractionSystemPrompt(), conversationTranscript(conversation));
+			persist(analysis.getId(), rawResponse, new AiAnalysisTaskContext.HealthExtraction());
+		} catch (Exception e) {
+			lifecycleService.markFailed(analysis.getId(), errorMessage(e));
+		}
+	}
+
+	private String completeWithRetry(String systemPrompt, String userPrompt) {
+		for (int attempt = 1; attempt <= MAX_OPENAI_ATTEMPTS; attempt++) {
+			try {
+				return openAiChatClient.complete(systemPrompt, userPrompt);
+			} catch (RuntimeException e) {
+				if (!isRetryable(e) || attempt == MAX_OPENAI_ATTEMPTS) {
+					throw e;
+				}
+				waitBeforeRetry(attempt);
+			}
+		}
+		throw new IllegalStateException("OpenAI completion attempts were exhausted");
+	}
+
+	private boolean isRetryable(RuntimeException e) {
+		if (e instanceof ResourceAccessException) {
+			return true;
+		}
+		if (e instanceof RestClientResponseException responseException) {
+			int status = responseException.getStatusCode().value();
+			return status == 408 || status == 429 || responseException.getStatusCode().is5xxServerError();
+		}
+		return false;
+	}
+
+	private void waitBeforeRetry(int completedAttempt) {
+		long exponentialBackoffMillis = 1_000L << (completedAttempt - 1);
+		long delayMillis = exponentialBackoffMillis + ThreadLocalRandom.current().nextLong(RETRY_JITTER_MILLIS + 1);
+		try {
+			Thread.sleep(delayMillis);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("OpenAI retry was interrupted", e);
+		}
+	}
+
+	private String conversationTranscript(Conversation conversation) {
+		List<ConversationMessage> messages = conversationMessageRepository
+				.findByConversationIdOrderBySequenceNoAsc(conversation.getId());
+		String transcript = messages.stream()
+				.map(message -> message.getRole() + ": " + message.getContent())
+				.collect(Collectors.joining("\n"));
+		return "Conversation date: " + conversation.getSessionDate() + "\n" + transcript;
+	}
+
+	private String healthExtractionSystemPrompt() {
+		return "Extract health records from the conversation. Return only a JSON object matching this contract: "
+				+ "{schemaVersion:'health-extraction-v1',records:[{type:'SLEEP|MEAL|EXERCISE|SKIN|MOOD|WATER|OTHER',"
+				+ "summary:string,detail:object,recordedDate:'YYYY-MM-DD',recordedAt:'ISO-8601 datetime or null',"
+				+ "confidence:number from 0 to 1,evidence:string}]}. "
+				+ "Use an empty records array when no health record is stated. Detail requirements: "
+				+ "SLEEP={hours:number,quality:'good|normal|bad|null',bedtime:'HH:mm|null',wakeTime:'HH:mm|null'}; "
+				+ "MEAL={menu:string,timing:'아침|점심|저녁|간식|null',amount:'적음|보통|많음|null'}; "
+				+ "EXERCISE={activity:string,duration:number,unit:'min',intensity:'낮음|보통|높음|null'}; "
+				+ "SKIN={condition:string,area:string|null}; MOOD={emotion:string,note:string|null}; "
+				+ "WATER={amount:number,unit:'ml|cup'}; OTHER={note:string}.";
+	}
+
+	private String errorMessage(Exception e) {
+		String message = e.getMessage();
+		return message == null || message.isBlank() ? e.getClass().getSimpleName() : message;
 	}
 
 	public void persist(Long analysisId, String rawResponse, AiAnalysisTaskContext context) {
