@@ -4,10 +4,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 
 import com.hackathon.backend.ai.dto.ConversationSummaryResult;
 import com.hackathon.backend.ai.dto.OverallReportResult;
@@ -42,6 +45,8 @@ import tools.jackson.databind.ObjectMapper;
 @Transactional
 public class AiAnalysisPipelineService {
 
+	private static final int MAX_OPENAI_ATTEMPTS = 3;
+	private static final long RETRY_JITTER_MILLIS = 500;
 	private final AiAnalysisRepository aiAnalysisRepository;
 	private final AiAnalysisLifecycleService lifecycleService;
 	private final AiResultParser resultParser;
@@ -96,10 +101,46 @@ public class AiAnalysisPipelineService {
 		lifecycleService.markProcessing(analysis.getId(), "gpt-4o-mini", "health-extraction-v1");
 
 		try {
-			String rawResponse = openAiChatClient.complete(healthExtractionSystemPrompt(), conversationTranscript(conversation));
+			String rawResponse = completeWithRetry(healthExtractionSystemPrompt(), conversationTranscript(conversation));
 			persist(analysis.getId(), rawResponse, new AiAnalysisTaskContext.HealthExtraction());
 		} catch (Exception e) {
 			lifecycleService.markFailed(analysis.getId(), errorMessage(e));
+		}
+	}
+
+	private String completeWithRetry(String systemPrompt, String userPrompt) {
+		for (int attempt = 1; attempt <= MAX_OPENAI_ATTEMPTS; attempt++) {
+			try {
+				return openAiChatClient.complete(systemPrompt, userPrompt);
+			} catch (RuntimeException e) {
+				if (!isRetryable(e) || attempt == MAX_OPENAI_ATTEMPTS) {
+					throw e;
+				}
+				waitBeforeRetry(attempt);
+			}
+		}
+		throw new IllegalStateException("OpenAI completion attempts were exhausted");
+	}
+
+	private boolean isRetryable(RuntimeException e) {
+		if (e instanceof ResourceAccessException) {
+			return true;
+		}
+		if (e instanceof RestClientResponseException responseException) {
+			int status = responseException.getStatusCode().value();
+			return status == 408 || status == 429 || responseException.getStatusCode().is5xxServerError();
+		}
+		return false;
+	}
+
+	private void waitBeforeRetry(int completedAttempt) {
+		long exponentialBackoffMillis = 1_000L << (completedAttempt - 1);
+		long delayMillis = exponentialBackoffMillis + ThreadLocalRandom.current().nextLong(RETRY_JITTER_MILLIS + 1);
+		try {
+			Thread.sleep(delayMillis);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("OpenAI retry was interrupted", e);
 		}
 	}
 

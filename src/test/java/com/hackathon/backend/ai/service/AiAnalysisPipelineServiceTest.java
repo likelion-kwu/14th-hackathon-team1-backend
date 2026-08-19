@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.web.client.ResourceAccessException;
 
 import com.hackathon.backend.ai.entity.AiAnalysis;
 import com.hackathon.backend.ai.client.OpenAiChatClient;
@@ -37,6 +39,9 @@ class AiAnalysisPipelineServiceTest {
 
 	@Autowired
 	private TestEntityManager entityManager;
+
+	@Autowired
+	private StubOpenAiChatClient openAiChatClient;
 
 	@Test
 	void preservesInvalidRawResponseAndMarksAnalysisFailed() {
@@ -99,6 +104,24 @@ class AiAnalysisPipelineServiceTest {
 	}
 
 	@Test
+	void retriesTemporaryOpenAiFailureBeforePersistingResult() {
+		Member member = entityManager.persist(Member.builder().nickname("회원").phone("010-5000-0014").build());
+		Conversation conversation = entityManager.persist(Conversation.builder().member(member)
+				.type(Conversation.ConversationType.CHAT).sessionDate(LocalDate.of(2026, 8, 20)).build());
+		entityManager.flush();
+		openAiChatClient.failNextCalls(1);
+
+		pipelineService.trigger(conversation.getId());
+		entityManager.flush();
+		entityManager.clear();
+
+		assertThat(openAiChatClient.callCount()).isEqualTo(2);
+		AiAnalysis analysis = entityManager.getEntityManager().createQuery("select a from AiAnalysis a", AiAnalysis.class)
+				.getSingleResult();
+		assertThat(analysis.getStatus()).isEqualTo(AiAnalysis.AnalysisStatus.SUCCESS);
+	}
+
+	@Test
 	void calculatesOverallReportValidationContextFromExistingData() {
 		Member member = entityManager.persist(Member.builder().nickname("회원").phone("010-5000-0012").build());
 		entityManager.persist(MonthlyConversationSummary.builder().member(member).periodStart(LocalDate.of(2026, 1, 1))
@@ -134,8 +157,31 @@ class AiAnalysisPipelineServiceTest {
 		}
 
 		@Bean
-		OpenAiChatClient openAiChatClient() {
-			return (systemPrompt, userPrompt) -> """
+		StubOpenAiChatClient openAiChatClient() {
+			return new StubOpenAiChatClient();
+		}
+	}
+
+	static class StubOpenAiChatClient implements OpenAiChatClient {
+		private final AtomicInteger remainingFailures = new AtomicInteger();
+		private final AtomicInteger calls = new AtomicInteger();
+
+		void failNextCalls(int failures) {
+			remainingFailures.set(failures);
+			calls.set(0);
+		}
+
+		int callCount() {
+			return calls.get();
+		}
+
+		@Override
+		public String complete(String systemPrompt, String userPrompt) {
+			calls.incrementAndGet();
+			if (remainingFailures.getAndUpdate(value -> Math.max(0, value - 1)) > 0) {
+				throw new ResourceAccessException("temporary OpenAI connection failure");
+			}
+			return """
 					{"schemaVersion":"health-extraction-v1","records":[{
 					"type":"WATER","summary":"물 300ml를 마셨습니다.","detail":{"amount":300,"unit":"ml"},
 					"recordedDate":"2026-08-20","recordedAt":null,"confidence":0.9,"evidence":"물 300ml"
