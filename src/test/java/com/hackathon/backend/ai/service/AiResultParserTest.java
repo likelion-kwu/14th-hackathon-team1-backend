@@ -70,6 +70,27 @@ class AiResultParserTest {
 	}
 
 	@Test
+	void rejectsWaterRecordWhenUnitIsNullOrOmitted() {
+		String nullUnitResponse = """
+				{"schemaVersion":"health-extraction-v1","records":[{
+				"type":"WATER","summary":"water intake","detail":{"amount":300,"unit":null},
+				"recordedDate":"2026-08-19","recordedAt":null,"confidence":0.9,"evidence":"drank water"}]}
+				""";
+		String omittedUnitResponse = """
+				{"schemaVersion":"health-extraction-v1","records":[{
+				"type":"WATER","summary":"water intake","detail":{"amount":300},
+				"recordedDate":"2026-08-19","recordedAt":null,"confidence":0.9,"evidence":"drank water"}]}
+				""";
+
+		assertThatThrownBy(() -> parser.parseHealthExtraction(nullUnitResponse))
+				.isInstanceOf(AiResultValidationException.class)
+				.hasMessageContaining("unit");
+		assertThatThrownBy(() -> parser.parseHealthExtraction(omittedUnitResponse))
+				.isInstanceOf(AiResultValidationException.class)
+				.hasMessageContaining("unit");
+	}
+
+	@Test
 	void parsesConversationSummaryForRequestedTaskTypeOnly() {
 		var result = parser.parseConversationSummary(TaskType.DAILY_SUMMARY,
 				"{" + "\"schemaVersion\":\"daily-summary-v1\",\"summary\":\"짧은 안부 통화였습니다.\"}");

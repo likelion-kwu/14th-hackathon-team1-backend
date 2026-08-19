@@ -134,7 +134,7 @@ public class AiResultParser {
 					requireExact(detail, "unit", "min"), enumOrNull(detail, "intensity", Set.of("낮음", "보통", "높음")));
 			case SKIN -> new SkinDetail(requiredText(detail, "condition"), nullableText(detail, "area"));
 			case MOOD -> new MoodDetail(requiredText(detail, "emotion"), nullableText(detail, "note"));
-			case WATER -> new WaterDetail(requiredDecimal(detail, "amount"), enumOrNull(detail, "unit", Set.of("ml", "cup")));
+			case WATER -> new WaterDetail(requiredDecimal(detail, "amount"), requiredEnum(detail, "unit", Set.of("ml", "cup")));
 			case OTHER -> new OtherDetail(requiredText(detail, "note"));
 		};
 	}
@@ -252,6 +252,14 @@ public class AiResultParser {
 		String value = nullableText(node, field);
 		if (value != null && !values.contains(value)) {
 			throw invalid(field + "의 값이 계약에 없습니다: " + value);
+		}
+		return value;
+	}
+
+	private String requiredEnum(JsonNode node, String field, Set<String> values) {
+		String value = requiredText(node, field);
+		if (!values.contains(value)) {
+			throw invalid(field + " has a value outside the contract: " + value);
 		}
 		return value;
 	}
