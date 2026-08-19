@@ -46,6 +46,13 @@ public class AiAnalysisLifecycleService {
 		findById(analysisId).fail(errorMessage);
 	}
 
+	/**
+	 * 파싱 실패에도 모델 원문을 보존합니다. rawResponse는 JSON 유효성과 무관하게 TEXT로 저장됩니다.
+	 */
+	public void markFailed(Long analysisId, String rawResponse, String errorMessage) {
+		findById(analysisId).fail(rawResponse, errorMessage);
+	}
+
 	private AiAnalysis findById(Long analysisId) {
 		return aiAnalysisRepository.findById(analysisId)
 				.orElseThrow(() -> new NotFoundException("해당 분석 작업을 찾을 수 없습니다."));

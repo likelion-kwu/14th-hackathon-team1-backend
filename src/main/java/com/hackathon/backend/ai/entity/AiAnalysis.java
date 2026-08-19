@@ -98,12 +98,20 @@ public class AiAnalysis {
     }
 
     /** 호출 또는 결과 검증 실패를 기록합니다. */
-    public void fail(String errorMessage) {
+    public void fail(String rawResponse, String errorMessage) {
         if (status != AnalysisStatus.PENDING && status != AnalysisStatus.PROCESSING) {
             throw new IllegalStateException("종료된 분석 작업은 실패 상태로 변경할 수 없습니다.");
         }
         this.status = AnalysisStatus.FAILED;
+        this.rawResponse = rawResponse;
         this.errorMessage = errorMessage;
+    }
+
+    /**
+     * 모델 원문이 없는 인프라 단계 실패를 기록할 때 사용합니다.
+     */
+    public void fail(String errorMessage) {
+        fail(null, errorMessage);
     }
 
     private void requireStatus(AnalysisStatus expected) {

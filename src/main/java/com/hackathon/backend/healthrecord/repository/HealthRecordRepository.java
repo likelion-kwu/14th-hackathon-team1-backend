@@ -25,4 +25,6 @@ public interface HealthRecordRepository extends JpaRepository<HealthRecord, Long
 	 * 하루치라 건수가 적어 정렬 없이 가져오고 순서는 서비스에서 맞춥니다.
 	 */
 	List<HealthRecord> findByMemberIdAndRecordedDate(Long memberId, LocalDate recordedDate);
+
+	List<HealthRecord> findByMemberIdAndRecordedDateBetween(Long memberId, LocalDate start, LocalDate end);
 }
