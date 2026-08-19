@@ -58,4 +58,12 @@ public class OverallReport {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    /** 회원당 하나인 리포트를 온디맨드 재생성 결과로 갱신합니다. */
+    public void refresh(String summary, String detail, int monthlySummaryCount, LocalDateTime generatedAt) {
+        this.summary = summary;
+        this.detail = detail;
+        this.monthlySummaryCount = monthlySummaryCount;
+        this.generatedAt = generatedAt;
+    }
 }

@@ -1,6 +1,7 @@
 package com.hackathon.backend.summary.repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,4 +17,8 @@ import com.hackathon.backend.summary.entity.DailyConversationSummary;
 public interface DailyConversationSummaryRepository extends JpaRepository<DailyConversationSummary, Long> {
 
 	Optional<DailyConversationSummary> findByMemberIdAndSummaryDate(Long memberId, LocalDate summaryDate);
+
+	/** 스케줄러의 주간 압축 입력을 날짜순으로 읽습니다. */
+	List<DailyConversationSummary> findByMemberIdAndSummaryDateBetweenOrderBySummaryDateAsc(
+			Long memberId, LocalDate start, LocalDate end);
 }
