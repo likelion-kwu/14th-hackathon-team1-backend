@@ -13,6 +13,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.web.client.ResourceAccessException;
 
 import com.hackathon.backend.ai.entity.AiAnalysis;
@@ -90,17 +91,21 @@ class AiAnalysisPipelineServiceTest {
 				.conversation(conversation).role(com.hackathon.backend.conversation.entity.ConversationMessage.MessageRole.USER)
 				.content("물 300ml를 마셨어요.").sequenceNo(1).build());
 		entityManager.flush();
+		commitTestTransaction();
 
 		pipelineService.trigger(conversation.getId());
-		entityManager.flush();
+		TestTransaction.start();
 		entityManager.clear();
-
-		AiAnalysis analysis = entityManager.getEntityManager().createQuery("select a from AiAnalysis a", AiAnalysis.class)
-				.getSingleResult();
-		assertThat(analysis.getStatus()).isEqualTo(AiAnalysis.AnalysisStatus.SUCCESS);
-		assertThat(analysis.getModelName()).isEqualTo("gpt-4o-mini");
-		assertThat(entityManager.getEntityManager().createQuery("select h from HealthRecord h", HealthRecord.class).getResultList())
-				.singleElement().extracting(HealthRecord::getType).isEqualTo(HealthRecord.HealthType.WATER);
+		try {
+			AiAnalysis analysis = entityManager.getEntityManager().createQuery("select a from AiAnalysis a", AiAnalysis.class)
+					.getSingleResult();
+			assertThat(analysis.getStatus()).isEqualTo(AiAnalysis.AnalysisStatus.SUCCESS);
+			assertThat(analysis.getModelName()).isEqualTo("gpt-4o-mini");
+			assertThat(entityManager.getEntityManager().createQuery("select h from HealthRecord h", HealthRecord.class).getResultList())
+					.singleElement().extracting(HealthRecord::getType).isEqualTo(HealthRecord.HealthType.WATER);
+		} finally {
+			deleteCommittedFixture();
+		}
 	}
 
 	@Test
@@ -109,16 +114,34 @@ class AiAnalysisPipelineServiceTest {
 		Conversation conversation = entityManager.persist(Conversation.builder().member(member)
 				.type(Conversation.ConversationType.CHAT).sessionDate(LocalDate.of(2026, 8, 20)).build());
 		entityManager.flush();
+		commitTestTransaction();
 		openAiChatClient.failNextCalls(1);
 
 		pipelineService.trigger(conversation.getId());
-		entityManager.flush();
+		TestTransaction.start();
 		entityManager.clear();
+		try {
+			assertThat(openAiChatClient.callCount()).isEqualTo(2);
+			AiAnalysis analysis = entityManager.getEntityManager().createQuery("select a from AiAnalysis a", AiAnalysis.class)
+					.getSingleResult();
+			assertThat(analysis.getStatus()).isEqualTo(AiAnalysis.AnalysisStatus.SUCCESS);
+		} finally {
+			deleteCommittedFixture();
+		}
+	}
 
-		assertThat(openAiChatClient.callCount()).isEqualTo(2);
-		AiAnalysis analysis = entityManager.getEntityManager().createQuery("select a from AiAnalysis a", AiAnalysis.class)
-				.getSingleResult();
-		assertThat(analysis.getStatus()).isEqualTo(AiAnalysis.AnalysisStatus.SUCCESS);
+	private void commitTestTransaction() {
+		TestTransaction.flagForCommit();
+		TestTransaction.end();
+	}
+
+	private void deleteCommittedFixture() {
+		entityManager.getEntityManager().createQuery("delete from HealthRecord").executeUpdate();
+		entityManager.getEntityManager().createQuery("delete from AiAnalysis").executeUpdate();
+		entityManager.getEntityManager().createQuery("delete from ConversationMessage").executeUpdate();
+		entityManager.getEntityManager().createQuery("delete from Conversation").executeUpdate();
+		entityManager.getEntityManager().createQuery("delete from Member").executeUpdate();
+		commitTestTransaction();
 	}
 
 	@Test
