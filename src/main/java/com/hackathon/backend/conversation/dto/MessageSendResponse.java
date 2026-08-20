@@ -18,6 +18,6 @@ public record MessageSendResponse(
 		@Schema(description = "저장된 사용자 메시지입니다.")
 		ConversationMessageResponse userMessage,
 
-		@Schema(description = "AI 응답 메시지입니다. AI 연동 전에는 목 응답입니다.")
+		@Schema(description = "OpenAI가 생성해 저장한 AI 응답 메시지입니다.")
 		ConversationMessageResponse assistantMessage) {
 }

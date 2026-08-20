@@ -36,10 +36,10 @@ public record ConversationMessageResponse(
 		int sequenceNo,
 
 		/*
-		 * AI 연동 전에는 0 입니다. 목 구현이 토큰을 세지 않기 때문입니다.
-		 * 프론트가 이 값으로 무언가를 계산하면 연동 시점에 동작이 바뀝니다.
+		 * OpenAI 사용량 응답을 저장하지 않으므로, 현재는 글자 수를 기준으로 대략적인 값을 계산합니다.
+		 * 청구·사용량 지표로 사용하면 안 됩니다.
 		 */
-		@Schema(description = "이 메시지의 토큰 수입니다. AI 연동 전에는 항상 0 입니다.", example = "0")
+		@Schema(description = "메시지 글자 수를 기준으로 추정한 토큰 수입니다. OpenAI 청구 토큰과는 다를 수 있습니다.", example = "8")
 		int tokenCount,
 
 		@Schema(description = "생성 시각입니다.", example = "2026-08-19T21:00:05")
