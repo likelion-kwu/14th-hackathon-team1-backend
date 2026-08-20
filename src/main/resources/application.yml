@@ -64,7 +64,7 @@ app:
       # AI_CHAT_* 값을 바꾸면 동일 Chat Completions 계약의 다른 제공자로 교체할 수 있습니다.
       api-key: ${AI_CHAT_API_KEY}
       base-url: ${AI_CHAT_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai}
-      model: ${AI_CHAT_MODEL:gemini-2.5-flash-lite}
+      model: ${AI_CHAT_MODEL:gemini-3.5-flash-lite}
       connect-timeout: ${AI_CHAT_CONNECT_TIMEOUT:5s}
       read-timeout: ${AI_CHAT_READ_TIMEOUT:30s}
   cors:
