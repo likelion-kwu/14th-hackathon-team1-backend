@@ -23,6 +23,7 @@ import com.hackathon.backend.conversation.dto.MessageSendRequest;
 import com.hackathon.backend.conversation.dto.MessageSendResponse;
 import com.hackathon.backend.conversation.entity.Conversation;
 import com.hackathon.backend.conversation.entity.ConversationMessage;
+import com.hackathon.backend.conversation.service.ConversationService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -30,25 +31,16 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 
-/**
- * 대화 API 명세입니다.
- *
- * 주의: 아직 구현이 없는 명세 전용 스텁입니다. 고정 예시를 반환하고 DB 를 읽거나
- * 쓰지 않으며, AI 도 호출하지 않습니다.
- *
- * 구현이 들어올 때 지켜야 할 것이 두 가지 있습니다. 프론트가 이미 이 형태로
- * 붙여 두었기 때문입니다.
- *
- *   - sessionDate 는 서버가 오늘(KST)로 정합니다. 클라이언트가 정하게 하면
- *     기기 시계가 틀어진 만큼 대화가 엉뚱한 날짜의 요약에 묶입니다.
- *   - 메시지 전송은 사용자 발화와 AI 응답을 함께 저장하고 둘 다 반환합니다.
- *     AI 응답만 주면 프론트가 방금 보낸 말풍선의 id 와 sequenceNo 를 알 수 없어
- *     화면과 서버 데이터를 맞출 수 없습니다.
- */
 @Tag(name = "conversation", description = "대화 조회·진행 API 입니다. (구현 전 · 고정 예시 반환)")
 @RestController
 @RequestMapping("/api/conversations")
 public class ConversationController {
+
+	private final ConversationService conversationService;
+
+	public ConversationController(ConversationService conversationService) {
+		this.conversationService = conversationService;
+	}
 
 	/** 스텁 응답입니다. 구현이 들어오면 지웁니다. */
 	private static final ConversationResponse SAMPLE_CONVERSATION = new ConversationResponse(
@@ -77,7 +69,6 @@ public class ConversationController {
 	public ApiResponse<List<ConversationResponse>> findByMember(
 			@Parameter(description = "회원 식별자입니다", required = true)
 			@RequestParam @Positive Long memberId,
-
 			@Parameter(description = "조회할 날짜입니다 (KST). 생략하면 전체를 최신순으로 반환합니다.")
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 
@@ -105,10 +96,6 @@ public class ConversationController {
 		return ApiResponse.success(List.of(SAMPLE_USER_MESSAGE, SAMPLE_ASSISTANT_MESSAGE));
 	}
 
-	/**
-	 * 201 이 아니라 200 입니다. 오늘 진행 중인 대화가 있으면 새로 만들지 않고
-	 * 그것을 돌려주므로, 항상 "생성됨" 이라고 답하면 사실과 다릅니다.
-	 */
 	@Operation(summary = "대화 시작",
 			description = "대화를 시작합니다. 오늘(KST) 이미 진행 중인 대화가 있으면 새로 만들지 않고 그 대화를 반환합니다. "
 					+ "그래서 201 이 아니라 200 입니다.")
@@ -126,7 +113,6 @@ public class ConversationController {
 	public ApiResponse<MessageSendResponse> sendMessage(
 			@Parameter(description = "대화 식별자입니다", required = true)
 			@PathVariable @Positive Long conversationId,
-
 			@Valid @RequestBody MessageSendRequest request) {
 
 		return ApiResponse.success(new MessageSendResponse(SAMPLE_USER_MESSAGE, SAMPLE_ASSISTANT_MESSAGE));
@@ -141,6 +127,8 @@ public class ConversationController {
 			@Parameter(description = "대화 식별자입니다", required = true)
 			@PathVariable @Positive Long conversationId) {
 
-		return ApiResponse.success(SAMPLE_CONVERSATION);
+		ConversationResponse response = conversationService.complete(conversationId);
+		conversationService.triggerAiAnalysis(conversationId);
+		return ApiResponse.success(response);
 	}
 }

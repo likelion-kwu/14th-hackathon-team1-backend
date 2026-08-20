@@ -56,4 +56,9 @@ public class Conversation {
     public enum ConversationStatus {
         SCHEDULED, IN_PROGRESS, COMPLETED, MISSED, FAILED, CANCELLED
     }
+    public void complete() {
+        this.status = ConversationStatus.COMPLETED;
+        this.endedAt = LocalDateTime.now();
+    }
+
 }
