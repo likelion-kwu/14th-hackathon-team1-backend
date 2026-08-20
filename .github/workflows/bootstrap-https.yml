@@ -1,0 +1,68 @@
+name: bootstrap-https
+
+on:
+  workflow_dispatch:
+    inputs:
+      letsencrypt_email:
+        description: Email address for Let's Encrypt expiry notices
+        required: true
+        type: string
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Install Nginx and Certbot
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" \
+            'sudo apt-get update && sudo apt-get install -y nginx certbot python3-certbot-nginx'
+
+      - name: Configure HTTP reverse proxy
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          scp -i ~/.ssh/deploy_key .github/nginx/hey-service.conf \
+            "$EC2_USER@$EC2_HOST:/tmp/hey-service.conf"
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" \
+            'sudo install -m 644 /tmp/hey-service.conf /etc/nginx/sites-available/hey-service && \
+             sudo ln -sfn /etc/nginx/sites-available/hey-service /etc/nginx/sites-enabled/hey-service && \
+             sudo rm -f /etc/nginx/sites-enabled/default && \
+             rm -f /tmp/hey-service.conf && sudo nginx -t && sudo systemctl reload nginx'
+
+      - name: Issue and install certificate
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          LETSENCRYPT_EMAIL: ${{ inputs.letsencrypt_email }}
+        run: |
+          if ! [[ "$LETSENCRYPT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+            echo "A valid Let's Encrypt email address is required."
+            exit 1
+          fi
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" \
+            "sudo certbot --nginx --non-interactive --agree-tos --email '$LETSENCRYPT_EMAIL' --redirect -d hey-service.duckdns.org"
+
+      - name: Verify HTTPS endpoint
+        run: |
+          curl --fail --retry 5 --retry-delay 3 https://hey-service.duckdns.org/health
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
