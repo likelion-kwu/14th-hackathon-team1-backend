@@ -126,9 +126,10 @@ public class ConversationController {
 	public ApiResponse<ConversationResponse> complete(
 			@Parameter(description = "대화 식별자입니다", required = true)
 			@PathVariable @Positive Long conversationId) {
-
-		ConversationResponse response = conversationService.complete(conversationId);
-		conversationService.triggerAiAnalysis(conversationId);
-		return ApiResponse.success(response);
+		ConversationService.CompleteResult result = conversationService.complete(conversationId);
+		if (result.newlyCompleted()) {
+			conversationService.triggerAiAnalysis(conversationId);
+		}
+		return ApiResponse.success(result.response());
 	}
 }
