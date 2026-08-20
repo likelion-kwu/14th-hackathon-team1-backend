@@ -48,6 +48,10 @@ spring:
       # 운영 데이터가 전부 지워집니다.
       ddl-auto: update
 
+server:
+  # Nginx가 전달하는 X-Forwarded-* 헤더를 신뢰해 Swagger UI의 Try it out URL과 리다이렉트 URL이 HTTPS를 사용하도록 합니다.
+  forward-headers-strategy: framework
+
 springdoc:
   # 해커톤 기간에는 열어 둡니다. 원래 ${SWAGGER_ENABLED:false} 였습니다.
   #
@@ -73,6 +77,9 @@ springdoc:
     enabled: true
 
 app:
+  api:
+    # OpenAPI spec을 파일로 내려받거나 외부에서 열어도 실제 HTTPS API를 호출하도록 공개 주소를 고정합니다.
+    public-url: ${PUBLIC_API_URL:https://hey-service.duckdns.org}
   cors:
     # 공통 application.yml 의 로컬 기본값을 덮습니다.
     #
