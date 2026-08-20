@@ -28,7 +28,7 @@ public class OpenAiChatCompletionClient implements OpenAiChatClient {
 		requestFactory.setConnectTimeout(properties.connectTimeout());
 		requestFactory.setReadTimeout(properties.readTimeout());
 		this.model = properties.model();
-		this.restClient = RestClient.builder().baseUrl("https://api.openai.com/v1")
+		this.restClient = RestClient.builder().baseUrl(properties.baseUrl())
 				.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
 				.requestFactory(requestFactory)
 				.build();
@@ -65,17 +65,17 @@ public class OpenAiChatCompletionClient implements OpenAiChatClient {
 					.retrieve()
 					.toEntity(OpenAiResponse.class);
 			response = responseEntity.getBody();
-			log.debug("OpenAI completion succeeded: clientRequestId={}, openAiRequestId={}, model={}", clientRequestId,
+			log.debug("AI chat completion succeeded: clientRequestId={}, providerRequestId={}, model={}", clientRequestId,
 					responseEntity.getHeaders().getFirst("x-request-id"), model);
 		} catch (RestClientResponseException exception) {
-			log.warn("OpenAI completion failed: clientRequestId={}, openAiRequestId={}, status={}", clientRequestId,
+			log.warn("AI chat completion failed: clientRequestId={}, providerRequestId={}, status={}", clientRequestId,
 					exception.getResponseHeaders().getFirst("x-request-id"), exception.getStatusCode().value());
 			throw exception;
 		}
 
 		if (response == null || response.choices() == null || response.choices().isEmpty()
 				|| response.choices().get(0).message() == null || response.choices().get(0).message().content() == null) {
-			throw new IllegalStateException("OpenAI response does not contain a completion message");
+			throw new IllegalStateException("AI provider response does not contain a completion message");
 		}
 		return response.choices().get(0).message().content();
 	}

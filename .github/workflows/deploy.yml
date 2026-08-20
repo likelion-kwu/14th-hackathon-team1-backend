@@ -50,15 +50,15 @@ jobs:
 
       - name: Prepare runtime environment
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          if [ -z "$OPENAI_API_KEY" ]; then
-            echo "OPENAI_API_KEY GitHub Secret is required."
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY GitHub Secret is required."
             exit 1
           fi
           umask 077
-          printf 'OPENAI_API_KEY=%s\nCORS_ALLOWED_ORIGINS=%s\n' \
-            "$OPENAI_API_KEY" "https://hey-service.vercel.app" > "$RUNNER_TEMP/hackathon.env.update"
+          printf 'AI_CHAT_API_KEY=%s\nCORS_ALLOWED_ORIGINS=%s\n' \
+            "$GEMINI_API_KEY" "https://hey-service.vercel.app" > "$RUNNER_TEMP/hackathon.env.update"
 
       - name: Apply runtime environment
         env:
@@ -68,7 +68,7 @@ jobs:
           scp -i ~/.ssh/deploy_key "$RUNNER_TEMP/hackathon.env.update" \
             "$EC2_USER@$EC2_HOST:/tmp/hackathon.env.update"
           ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" \
-            'sudo sed -i "/^OPENAI_API_KEY=/d; /^CORS_ALLOWED_ORIGINS=/d" /etc/hackathon.env && \
+            'sudo sed -i "/^OPENAI_API_KEY=/d; /^AI_CHAT_API_KEY=/d; /^CORS_ALLOWED_ORIGINS=/d" /etc/hackathon.env && \
              sudo tee -a /etc/hackathon.env < /tmp/hackathon.env.update > /dev/null && \
              sudo chmod 600 /etc/hackathon.env && \
              rm -f /tmp/hackathon.env.update'
