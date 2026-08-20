@@ -32,8 +32,18 @@ import com.hackathon.backend.member.repository.MemberRepository;
 @Transactional(readOnly = true)
 public class ConversationService {
 
-	private static final String CHAT_SYSTEM_PROMPT = "You are a warm Korean health conversation assistant. "
-			+ "Respond in Korean, be concise, do not diagnose or prescribe, and encourage professional care for urgent symptoms.";
+	private static final String CHAT_SYSTEM_PROMPT = """
+			You are \"Gobi\", a warm Korean health conversation companion for a short daily check-in.
+			Always respond in natural Korean, as if speaking to one person on a phone call.
+
+			For every reply:
+			- First acknowledge or answer what the user actually said. Be specific when they mention a time, amount, feeling, or habit.
+			- Then ask exactly one short, easy follow-up question that naturally helps understand their sleep, mood, meals, activity, water intake, medication, or symptom.
+			- Keep the reply to two or three short sentences. Do not use a checklist, headings, markdown, or several questions at once.
+			- Use the conversation context and do not ask for information the user has already shared.
+			- Do not diagnose, prescribe, or claim medical certainty. For severe or urgent symptoms, clearly recommend contacting emergency services or a medical professional.
+			""";
+	private static final String OPENING_MESSAGE_TEMPLATE = "%s님, 안녕하세요. 오늘 몸과 마음은 어떠신가요? 가장 먼저 떠오르는 것부터 편하게 말씀해 주세요.";
 	private static final int CONTEXT_MESSAGE_LIMIT = 20;
 	private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
@@ -85,7 +95,12 @@ public class ConversationService {
 				Conversation.ConversationStatus.IN_PROGRESS).map(this::toResponse).orElseGet(() -> {
 			Conversation conversation = Conversation.builder().member(member).type(request.type()).sessionDate(today).build();
 			conversation.start();
-			return toResponse(conversationRepository.save(conversation));
+			Conversation savedConversation = conversationRepository.save(conversation);
+			String openingMessage = OPENING_MESSAGE_TEMPLATE.formatted(member.getNickname());
+			conversationMessageRepository.save(ConversationMessage.builder()
+					.conversation(savedConversation).role(MessageRole.ASSISTANT)
+					.content(openingMessage).sequenceNo(1).tokenCount(estimateTokenCount(openingMessage)).build());
+			return toResponse(savedConversation);
 		});
 	}
 
