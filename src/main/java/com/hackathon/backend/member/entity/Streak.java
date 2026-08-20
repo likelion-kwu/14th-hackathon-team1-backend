@@ -36,4 +36,15 @@ public class Streak {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    public void recordActivity(LocalDate activeDate) {
+        if (activeDate.equals(lastActiveDate)) {
+            return;
+        }
+        currentStreak = lastActiveDate != null && lastActiveDate.plusDays(1).equals(activeDate)
+                ? currentStreak + 1
+                : 1;
+        longestStreak = Math.max(longestStreak, currentStreak);
+        lastActiveDate = activeDate;
+    }
 }

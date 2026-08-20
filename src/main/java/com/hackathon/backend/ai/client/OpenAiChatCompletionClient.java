@@ -24,13 +24,23 @@ public class OpenAiChatCompletionClient implements OpenAiChatClient {
 
 	@Override
 	public String complete(String systemPrompt, String userPrompt) {
+		return request(List.of(new Message("system", systemPrompt), new Message("user", userPrompt)),
+				Map.of("type", "json_object"));
+	}
+
+	@Override
+	public String reply(String systemPrompt, List<ChatMessage> messages) {
+		List<Message> requestMessages = new java.util.ArrayList<>();
+		requestMessages.add(new Message("system", systemPrompt));
+		messages.forEach(message -> requestMessages.add(new Message(message.role(), message.content())));
+		return request(requestMessages, null);
+	}
+
+	private String request(List<Message> messages, Map<String, String> responseFormat) {
 		OpenAiResponse response = restClient.post()
 				.uri("/chat/completions")
 				.contentType(MediaType.APPLICATION_JSON)
-				.body(new OpenAiRequest(MODEL, List.of(
-						new Message("system", systemPrompt),
-						new Message("user", userPrompt)),
-						Map.of("type", "json_object")))
+				.body(new OpenAiRequest(MODEL, messages, responseFormat))
 				.retrieve()
 				.body(OpenAiResponse.class);
 
