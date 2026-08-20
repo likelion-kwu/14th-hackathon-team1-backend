@@ -9,9 +9,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 @Validated
-@ConfigurationProperties("app.ai.openai")
+@ConfigurationProperties("app.ai.chat")
 public record OpenAiProperties(
         @NotBlank String apiKey,
+        @NotBlank String baseUrl,
         @NotBlank String model,
         @NotNull Duration connectTimeout,
         @NotNull Duration readTimeout) {
