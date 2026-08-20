@@ -44,4 +44,13 @@ public class Member {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    public void updateNotificationSetting(LocalTime notifyTime, boolean notifyEnabled) {
+        this.notifyTime = notifyTime;
+        this.notifyEnabled = notifyEnabled;
+    }
+
+    public void updateFcmToken(String fcmToken) {
+        this.fcmToken = fcmToken;
+    }
 }
