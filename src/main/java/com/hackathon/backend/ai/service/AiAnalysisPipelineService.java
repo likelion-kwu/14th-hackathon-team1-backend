@@ -8,7 +8,10 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -61,6 +64,7 @@ public class AiAnalysisPipelineService {
 	private final ConversationRepository conversationRepository;
 	private final ConversationMessageRepository conversationMessageRepository;
 	private final OpenAiChatClient openAiChatClient;
+	private final TransactionTemplate transactionTemplate;
 
 	public AiAnalysisPipelineService(
 			AiAnalysisRepository aiAnalysisRepository,
@@ -75,7 +79,7 @@ public class AiAnalysisPipelineService {
 			ObjectMapper objectMapper,
 			ConversationRepository conversationRepository,
 			ConversationMessageRepository conversationMessageRepository,
-			OpenAiChatClient openAiChatClient) {
+			OpenAiChatClient openAiChatClient, TransactionTemplate transactionTemplate) {
 		this.aiAnalysisRepository = aiAnalysisRepository;
 		this.lifecycleService = lifecycleService;
 		this.resultParser = resultParser;
@@ -89,17 +93,33 @@ public class AiAnalysisPipelineService {
 		this.conversationRepository = conversationRepository;
 		this.conversationMessageRepository = conversationMessageRepository;
 		this.openAiChatClient = openAiChatClient;
+		this.transactionTemplate = transactionTemplate;
 	}
 
 	/**
 	 * Public conversation-completion hook. Call this immediately after a conversation is completed.
 	 * Model failures are retained on the AI analysis task and do not alter the completed conversation state.
 	 */
+	@Transactional(propagation = Propagation.NOT_SUPPORTED)
 	public void trigger(Long conversationId) {
+		Long analysisId;
+		try {
+			analysisId = lifecycleService.startHealthExtraction(conversationId, openAiChatClient.modelName()).orElse(null);
+		} catch (DataIntegrityViolationException exception) {
+			return;
+		}
+		if (analysisId == null) {
+			return;
+		}
 		Conversation conversation = conversationRepository.findById(conversationId)
 				.orElseThrow(() -> new NotFoundException("Conversation not found"));
-		execute(conversation.getMember(), conversation, TaskType.HEALTH_EXTRACTION,
-				healthExtractionSystemPrompt(), conversationTranscript(conversation), new AiAnalysisTaskContext.HealthExtraction());
+		try {
+			String rawResponse = completeWithRetry(healthExtractionSystemPrompt(), conversationTranscript(conversation));
+			transactionTemplate.executeWithoutResult(status -> persist(analysisId, rawResponse,
+					new AiAnalysisTaskContext.HealthExtraction()));
+		} catch (Exception exception) {
+			lifecycleService.markFailed(analysisId, errorMessage(exception));
+		}
 	}
 
 	/**
@@ -109,7 +129,7 @@ public class AiAnalysisPipelineService {
 	public AiAnalysis execute(Member member, Conversation conversation, TaskType taskType, String systemPrompt,
 			String userPrompt, AiAnalysisTaskContext context) {
 		AiAnalysis analysis = lifecycleService.create(member, conversation, taskType);
-		lifecycleService.markProcessing(analysis.getId(), "gpt-4o-mini", schemaVersion(taskType));
+		lifecycleService.markProcessing(analysis.getId(), openAiChatClient.modelName(), schemaVersion(taskType));
 		try {
 			String rawResponse = completeWithRetry(systemPrompt, userPrompt);
 			persist(analysis.getId(), rawResponse, context);

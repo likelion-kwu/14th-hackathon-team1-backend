@@ -10,7 +10,9 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "ai_analysis")
+@Table(name = "ai_analysis", uniqueConstraints = @UniqueConstraint(
+        name = "uk_ai_analysis_conversation_task_type",
+        columnNames = { "conversation_id", "task_type" }))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

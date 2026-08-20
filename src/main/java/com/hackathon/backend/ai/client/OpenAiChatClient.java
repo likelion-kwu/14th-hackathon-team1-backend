@@ -7,6 +7,10 @@ public interface OpenAiChatClient {
 
 	String complete(String systemPrompt, String userPrompt);
 
+	default String modelName() {
+		return "gpt-4o-mini";
+	}
+
 	default String reply(String systemPrompt, List<ChatMessage> messages) {
 		throw new UnsupportedOperationException("Chat replies are not configured");
 	}

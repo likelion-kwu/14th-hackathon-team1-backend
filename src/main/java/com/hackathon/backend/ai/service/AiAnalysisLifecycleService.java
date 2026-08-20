@@ -1,13 +1,17 @@
 package com.hackathon.backend.ai.service;
 
+import java.util.Optional;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import com.hackathon.backend.ai.entity.AiAnalysis;
 import com.hackathon.backend.ai.entity.AiAnalysis.TaskType;
 import com.hackathon.backend.ai.repository.AiAnalysisRepository;
 import com.hackathon.backend.common.exception.NotFoundException;
 import com.hackathon.backend.conversation.entity.Conversation;
+import com.hackathon.backend.conversation.repository.ConversationRepository;
 import com.hackathon.backend.member.entity.Member;
 
 /**
@@ -21,9 +25,27 @@ import com.hackathon.backend.member.entity.Member;
 public class AiAnalysisLifecycleService {
 
 	private final AiAnalysisRepository aiAnalysisRepository;
+	private final ConversationRepository conversationRepository;
 
-	public AiAnalysisLifecycleService(AiAnalysisRepository aiAnalysisRepository) {
+	public AiAnalysisLifecycleService(AiAnalysisRepository aiAnalysisRepository, ConversationRepository conversationRepository) {
 		this.aiAnalysisRepository = aiAnalysisRepository;
+		this.conversationRepository = conversationRepository;
+	}
+
+	/**
+	 * Creates the health-extraction task in its own transaction before the worker calls OpenAI.
+	 * This makes PROCESSING visible to polling clients immediately and prevents duplicate tasks.
+	 */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public Optional<Long> startHealthExtraction(Long conversationId, String modelName) {
+		if (aiAnalysisRepository.findByConversationIdAndTaskType(conversationId, TaskType.HEALTH_EXTRACTION).isPresent()) {
+			return Optional.empty();
+		}
+		Conversation conversation = conversationRepository.findById(conversationId)
+				.orElseThrow(() -> new NotFoundException("Conversation not found"));
+		AiAnalysis analysis = create(conversation.getMember(), conversation, TaskType.HEALTH_EXTRACTION);
+		analysis.startProcessing(modelName, "health-extraction-v1");
+		return Optional.of(analysis.getId());
 	}
 
 	public AiAnalysis create(Member member, Conversation conversation, TaskType taskType) {

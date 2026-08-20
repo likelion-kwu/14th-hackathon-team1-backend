@@ -7,8 +7,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import com.hackathon.backend.ai.entity.AiAnalysis.TaskType;
-import com.hackathon.backend.ai.repository.AiAnalysisRepository;
 import com.hackathon.backend.ai.service.AiAnalysisPipelineService;
 import com.hackathon.backend.conversation.event.ConversationCompletedEvent;
 
@@ -16,22 +14,15 @@ import com.hackathon.backend.conversation.event.ConversationCompletedEvent;
 public class ConversationCompletedAiAnalysisListener {
 
 	private static final Logger log = LoggerFactory.getLogger(ConversationCompletedAiAnalysisListener.class);
-	private final AiAnalysisRepository aiAnalysisRepository;
 	private final AiAnalysisPipelineService aiAnalysisPipelineService;
 
-	public ConversationCompletedAiAnalysisListener(AiAnalysisRepository aiAnalysisRepository,
-			AiAnalysisPipelineService aiAnalysisPipelineService) {
-		this.aiAnalysisRepository = aiAnalysisRepository;
+	public ConversationCompletedAiAnalysisListener(AiAnalysisPipelineService aiAnalysisPipelineService) {
 		this.aiAnalysisPipelineService = aiAnalysisPipelineService;
 	}
 
-	@Async
+	@Async("aiAnalysisExecutor")
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void triggerHealthExtraction(ConversationCompletedEvent event) {
-		if (aiAnalysisRepository.findByConversationIdAndTaskType(event.conversationId(), TaskType.HEALTH_EXTRACTION)
-				.isPresent()) {
-			return;
-		}
 		try {
 			aiAnalysisPipelineService.trigger(event.conversationId());
 		} catch (Exception exception) {
