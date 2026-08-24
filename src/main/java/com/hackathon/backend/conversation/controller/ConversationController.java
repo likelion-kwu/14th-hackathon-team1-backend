@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -75,13 +76,16 @@ public class ConversationController {
 
 	@Operation(summary = "메시지 전송",
 			description = "진행 중(IN_PROGRESS) 대화에만 메시지를 보낼 수 있습니다. 사용자 메시지를 저장한 뒤 OpenAI 응답도 저장하고 "
-					+ "두 메시지를 함께 반환합니다. 진행 중이 아닌 대화는 400(BAD_REQUEST)입니다.")
+					+ "두 메시지를 함께 반환합니다. 진행 중이 아닌 대화는 400(BAD_REQUEST)입니다. "
+					+ "Idempotency-Key 헤더를 제공하면 동일 키의 재요청 시 저장된 응답을 그대로 반환합니다.")
 	@ApiNotFound("해당 대화가 없습니다.")
 	@PostMapping("/{conversationId}/messages")
 	public ApiResponse<MessageSendResponse> sendMessage(
 			@Parameter(required = true) @PathVariable @Positive Long conversationId,
-			@Valid @RequestBody MessageSendRequest request) {
-		return ApiResponse.success(conversationService.sendMessage(conversationId, request));
+			@Valid @RequestBody MessageSendRequest request,
+			@Parameter(description = "재요청 중복 방지용 UUID. 동일 키로 재전송 시 저장된 응답을 반환합니다.")
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+		return ApiResponse.success(conversationService.sendMessage(conversationId, request, idempotencyKey));
 	}
 
 	@Operation(summary = "대화 종료",

@@ -5,10 +5,11 @@ import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.hackathon.backend.ai.client.OpenAiChatClient;
@@ -45,6 +46,7 @@ public class ConversationService {
 			""";
 	private static final String OPENING_MESSAGE_TEMPLATE = "%s님, 안녕하세요. 오늘 몸과 마음은 어떠신가요? 가장 먼저 떠오르는 것부터 편하게 말씀해 주세요.";
 	private static final int CONTEXT_MESSAGE_LIMIT = 20;
+	private static final int MAX_AI_RETRY = 2;
 	private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
 	private final ConversationRepository conversationRepository;
@@ -104,9 +106,40 @@ public class ConversationService {
 		});
 	}
 
+	/**
+	 * 메시지 전송.
+	 *
+	 * <p>동일 대화에 대한 동시 요청은 conversation row의 pessimistic lock으로 직렬화합니다.
+	 * OpenAI 일시 오류는 최대 {@value MAX_AI_RETRY}회 재시도하며, 최종 실패 시 503을 반환합니다.
+	 * 실패한 경우 트랜잭션이 롤백되므로 사용자 메시지도 저장되지 않습니다.
+	 *
+	 * <p>clientMessageId가 제공된 경우 이미 처리된 요청인지 확인하고,
+	 * 존재하면 저장된 응답을 그대로 반환합니다(멱등성 보장).
+	 */
 	@Transactional
-	public MessageSendResponse sendMessage(Long conversationId, MessageSendRequest request) {
-		Conversation conversation = findConversation(conversationId);
+	public MessageSendResponse sendMessage(Long conversationId, MessageSendRequest request, String clientMessageId) {
+		// 멱등성 키 확인: 이미 처리된 요청이면 저장된 응답을 그대로 반환
+		if (clientMessageId != null) {
+			return conversationMessageRepository.findByClientMessageId(clientMessageId)
+					.map(userMsg -> {
+						ConversationMessage assistantMsg = conversationMessageRepository
+								.findByConversationIdAndSequenceNo(conversationId, userMsg.getSequenceNo() + 1)
+								.orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+										"응답 메시지를 찾을 수 없습니다."));
+						return new MessageSendResponse(toMessageResponse(userMsg), toMessageResponse(assistantMsg));
+					})
+					.orElseGet(() -> processNewMessage(conversationId, request, clientMessageId));
+		}
+		return processNewMessage(conversationId, request, null);
+	}
+
+	/**
+	 * 실제 메시지 저장 및 AI 호출을 수행합니다.
+	 */
+	private MessageSendResponse processNewMessage(Long conversationId, MessageSendRequest request, String clientMessageId) {
+		// pessimistic lock으로 동시 요청 직렬화 + sequenceNo 경쟁 조건 방지
+		Conversation conversation = conversationRepository.findWithLockById(conversationId)
+				.orElseThrow(() -> new NotFoundException("해당 대화가 없습니다."));
 		if (conversation.getStatus() != Conversation.ConversationStatus.IN_PROGRESS) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "진행 중인 대화가 아닙니다.");
 		}
@@ -114,16 +147,15 @@ public class ConversationService {
 		int nextSequence = Math.toIntExact(conversationMessageRepository.countByConversationId(conversationId)) + 1;
 		ConversationMessage userMessage = conversationMessageRepository.save(ConversationMessage.builder()
 				.conversation(conversation).role(MessageRole.USER).content(request.content()).sequenceNo(nextSequence)
-				.tokenCount(estimateTokenCount(request.content())).build());
+				.tokenCount(estimateTokenCount(request.content())).clientMessageId(clientMessageId).build());
 
 		List<OpenAiChatClient.ChatMessage> context = conversationMessageRepository
 				.findByConversationIdOrderBySequenceNoAsc(conversationId).stream()
 				.skip(Math.max(0, nextSequence - CONTEXT_MESSAGE_LIMIT)).map(message -> new OpenAiChatClient.ChatMessage(
 						message.getRole() == MessageRole.USER ? "user" : "assistant", message.getContent())).toList();
-		String reply = openAiChatClient.reply(CHAT_SYSTEM_PROMPT, context);
-		if (reply == null || reply.isBlank()) {
-			throw new IllegalStateException("OpenAI returned an empty chat reply");
-		}
+
+		// 실패 시 예외가 던져지므로 @Transactional 롤백으로 userMessage도 함께 미저장
+		String reply = callOpenAiWithRetry(context);
 
 		ConversationMessage assistantMessage = conversationMessageRepository.save(ConversationMessage.builder()
 				.conversation(conversation).role(MessageRole.ASSISTANT).content(reply.trim()).sequenceNo(nextSequence + 1)
@@ -145,6 +177,44 @@ public class ConversationService {
 		streakService.recordActivity(conversation.getMember(), LocalDate.now(KOREA_ZONE));
 		eventPublisher.publishEvent(new ConversationCompletedEvent(conversationId));
 		return toResponse(conversation);
+	}
+
+	/**
+	 * OpenAI 호출을 최대 {@value MAX_AI_RETRY}회 재시도합니다.
+	 * 일시 오류(네트워크, 408, 429, 5xx)에만 재시도하며 최종 실패 시 503을 던집니다.
+	 */
+	private String callOpenAiWithRetry(List<OpenAiChatClient.ChatMessage> context) {
+		Exception lastException = null;
+		for (int attempt = 0; attempt <= MAX_AI_RETRY; attempt++) {
+			try {
+				String reply = openAiChatClient.reply(CHAT_SYSTEM_PROMPT, context);
+				if (reply == null || reply.isBlank()) {
+					lastException = new IllegalStateException("OpenAI returned an empty reply");
+					continue;
+				}
+				return reply;
+			} catch (Exception e) {
+				if (isRetryable(e)) {
+					lastException = e;
+				} else {
+					throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+							"AI 응답 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
+				}
+			}
+		}
+		throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+				"AI 응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요.", lastException);
+	}
+
+	private boolean isRetryable(Exception e) {
+		if (e instanceof ResourceAccessException) {
+			return true;
+		}
+		if (e instanceof ResponseStatusException rse) {
+			int status = rse.getStatusCode().value();
+			return status == 408 || status == 429 || status >= 500;
+		}
+		return false;
 	}
 
 	private Conversation findConversation(Long conversationId) {
