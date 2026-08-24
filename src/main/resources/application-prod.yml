@@ -49,6 +49,8 @@ spring:
       ddl-auto: update
 
 server:
+  # Spring Boot를 localhost에만 바인딩합니다. Nginx의 프록시 요청만 받고 외부 IP:8080 직접 접근을 차단합니다.
+  address: 127.0.0.1
   # Nginx가 전달하는 X-Forwarded-* 헤더를 신뢰해 Swagger UI의 Try it out URL과 리다이렉트 URL이 HTTPS를 사용하도록 합니다.
   forward-headers-strategy: framework
 
@@ -100,12 +102,6 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
 
 # 넣지 않는 설정과 그 이유입니다. Boot 3 기준 가이드를 보고 추가하지 마십시오.
-#
-# server.address: 127.0.0.1
-#   Nginx 를 앞에 세운 뒤에야 의미가 있습니다. 지금 넣으면 외부에서 8080 접근이
-#   막혀 배포 검증(외부 curl)이 실패합니다. Nginx 를 도입할 때는 이 설정과 함께
-#   server.forward-headers-strategy: framework 도 넣어야 합니다. 없으면
-#   리다이렉트와 Swagger UI 의 서버 URL 이 http://127.0.0.1:8080 으로 나갑니다.
 #
 # server.shutdown: graceful
 #   Boot 4 의 기본값이 이미 graceful 입니다. Boot 3 에서는 immediate 가 기본이라
